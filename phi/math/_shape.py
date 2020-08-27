@@ -52,7 +52,7 @@ class Shape:
         raise ValueError("Shape %s does not contain dimension with name '%s'" % (self, name))
 
     def get_size(self, name):
-        if isinstance(name, (str, int)):
+        if isinstance(name, str):
             return self.sizes[self.names.index(name)]
         elif isinstance(name, (tuple, list)):
             return tuple(self.get_size(n) for n in name)
@@ -111,7 +111,7 @@ class Shape:
         return self.filtered([size != 1 for size in self.sizes])
 
     def mask(self, names):
-        if isinstance(names, (str, int)):
+        if isinstance(names, str):
             names = [names]
         mask = [1 if name in names else 0 for name in self.names]
         return tuple(mask)
@@ -210,6 +210,15 @@ class Shape:
     def __and__(self, other):
         return self.combined(other)
 
+    def expand_batch(self, size, name, pos=None):
+        return self.expand(size, name, BATCH_DIM, pos)
+
+    def expand_spatial(self, size, name, pos=None):
+        return self.expand(size, name, SPATIAL_DIM, pos)
+
+    def expand_channel(self, size, name, pos=None):
+        return self.expand(size, name, CHANNEL_DIM, pos)
+
     def expand(self, size, name, dim_type, pos=None):
         """
         Add a dimension to the shape.
@@ -233,7 +242,7 @@ class Shape:
         return Shape(sizes, names, types)
 
     def without(self, other):
-        if isinstance(other, (str, int)):
+        if isinstance(other, str):
             return self[[i for i in range(self.rank) if self.names[i] != other]]
         if isinstance(other, (tuple, list)):
             return self[[i for i in range(self.rank) if self.names[i] not in other]]
@@ -278,6 +287,10 @@ class Shape:
         if self.rank == 0:
             return 1
         return math.prod(self.sizes)
+
+    @property
+    def is_empty(self):
+        return len(self.sizes) == 0
 
     def order(self, sequence, default=None):
         """

@@ -8,7 +8,7 @@ import numpy as np
 from ._shape import BATCH_DIM, CHANNEL_DIM, SPATIAL_DIM, Shape, EMPTY_SHAPE, spatial_shape, define_shape
 from ._track import as_sparse_linear_operation, SparseLinearOperation, pad_operator, sum_operators
 from .backend import extrapolation, math
-from ._tensors import AbstractTensor, tensor, broadcastable_native_tensors, NativeTensor, CollapsedTensor, TensorStack, combined_shape
+from ._tensors import Tensor, tensor, broadcastable_native_tensors, NativeTensor, CollapsedTensor, TensorStack, combined_shape
 from phi.math.backend._scipy_backend import SCIPY_BACKEND
 
 any_ = any
@@ -16,7 +16,7 @@ all_ = all
 
 
 def is_tensor(x):
-    return isinstance(x, AbstractTensor)
+    return isinstance(x, Tensor)
 
 
 def as_tensor(x, convert_external=True):
@@ -31,7 +31,7 @@ def copy(tensor, only_mutable=False):
 
 
 def transpose(tensor, axes):
-    if isinstance(tensor, AbstractTensor):
+    if isinstance(tensor, Tensor):
         return CollapsedTensor(tensor, tensor.shape[axes])
     else:
         return math.transpose(tensor, axes)
@@ -248,37 +248,41 @@ def where(condition, x=None, y=None):
     raise NotImplementedError()
 
 
-def sum(value: AbstractTensor or list or tuple, axis=None):
-    if axis == () or axis == []:
+def sum(value: Tensor or list or tuple, axis=None):
+    return _reduce(value, axis, math.sum)
+
+
+def _reduce(value: Tensor or list or tuple, axis, native_function):
+    if axis in ((), [], EMPTY_SHAPE):
         return value
     if isinstance(value, (tuple, list)):
         values = [tensor(v) for v in value]
-        value = _stack(values, '_sum', BATCH_DIM)
+        value = _stack(values, '_reduce', BATCH_DIM)
         if axis is None:
             pass  # continue below
         elif axis == 0:
-            axis = '_sum'
+            axis = '_reduce'
         else:
             raise ValueError('axis must be 0 or None when passing a sequence of tensors')
     else:
         value = tensor(value)
     axes = _axis(axis, value.shape)
     if isinstance(value, NativeTensor):
-        result = math.sum(value.native(), axis=value.shape.index(axes))
+        result = native_function(value.native(), axis=value.shape.index(axes))
         return NativeTensor(result, value.shape.without(axes))
     elif isinstance(value, TensorStack):
-        # --- inner sums ---
+        # --- inner reduce ---
         inner_axes = [ax for ax in axes if ax != value.stack_dim_name]
-        sums = [sum(t, inner_axes) for t in value.tensors]
-        # --- outer sum ---
+        red_inners = [_reduce(t, inner_axes, native_function) for t in value.tensors]
+        # --- outer reduce ---
         if value.stack_dim_name in axes:
-            if any_([isinstance(t, SparseLinearOperation) for t in sums]):
-                return sum_operators(sums)
-            natives = [t.native() for t in sums]  # TODO support sparse linear operations
-            result = math.sum(natives, axis=0)
-            return NativeTensor(result, sums[0].shape)
+            if any_([isinstance(t, SparseLinearOperation) for t in red_inners]):
+                return sum_operators(red_inners)  # TODO other functions
+            natives = [t.native() for t in red_inners]
+            result = native_function(natives, axis=0)
+            return NativeTensor(result, red_inners[0].shape)
         else:
-            return TensorStack(sums, value.stack_dim_name, value.stack_dim_type, keep_separate=value.keep_separate)
+            return TensorStack(red_inners, value.stack_dim_name, value.stack_dim_type, keep_separate=value.keep_separate)
     else:
         raise NotImplementedError()
 
@@ -293,25 +297,35 @@ def _axis(axis, shape: Shape):
     raise ValueError(axis)
 
 
-def mean(value, axis=None):
-    result = math.mean(value.native(), axis=value.shape.index(axis), keepdims=False)
-    return NativeTensor(result, value.shape.without(axis))
+def mean(value: Tensor or list or tuple, axis=None):
+    return _reduce(value, axis, math.mean)
 
 
-def std(x: AbstractTensor, axis=None, keepdims=False):
-    result = math.std(x.native(), axis=x.shape.index(axis), keepdims=False)
-    return NativeTensor(result, x.shape.without(axis))
+def std(value: Tensor or list or tuple, axis=None):
+    return _reduce(value, axis, math.std)
 
 
-def py_func(func, inputs, Tout, shape_out, stateful=True, name=None, grad=None):
-    raise NotImplementedError()
+def any(boolean_tensor: Tensor or list or tuple, axis=None):
+    return _reduce(boolean_tensor, axis, math.any)
 
 
-def zeros_like(tensor):
+def all(boolean_tensor: Tensor or list or tuple, axis=None):
+    return _reduce(boolean_tensor, axis, math.all)
+
+
+def max(value: Tensor or list or tuple, axis=None):
+    return _reduce(value, axis, math.max)
+
+
+def min(value: Tensor or list or tuple, axis=None):
+    return _reduce(value, axis, math.min)
+
+
+def zeros_like(tensor: Tensor):
     return zeros(tensor.shape, dtype=tensor.dtype)
 
 
-def ones_like(tensor):
+def ones_like(tensor: Tensor):
     return zeros(tensor.shape, dtype=tensor.dtype) + 1
 
 
@@ -327,36 +341,24 @@ def einsum(equation, *tensors):
     raise NotImplementedError()
 
 
-def abs(x: AbstractTensor):
+def abs(x: Tensor):
     return x._op1(math.abs)
 
 
-def sign(x: AbstractTensor):
+def sign(x: Tensor):
     return x._op1(math.sign)
 
 
-def round(x: AbstractTensor):
+def round(x: Tensor):
     return x._op1(math.round)
 
 
-def ceil(x: AbstractTensor):
+def ceil(x: Tensor):
     return x._op1(math.ceil)
 
 
-def floor(x: AbstractTensor):
+def floor(x: Tensor):
     return x._op1(math.floor)
-
-
-def max(x, axis=None):
-    x = tensor(x)
-    result = math.max(x.native(), x.shape.index(axis), keepdims=False)
-    return NativeTensor(result, x.shape.without(axis))
-
-
-def min(x, axis=None):
-    x = tensor(x)
-    result = math.min(x.native(), x.shape.index(axis), keepdims=False)
-    return NativeTensor(result, x.shape.without(axis))
 
 
 def maximum(a, b):
@@ -370,10 +372,11 @@ def minimum(a, b):
 
 
 def clip(x, minimum, maximum):
-    new_shape, (x_, min_, max_) = broadcastable_native_tensors(*tensor(x, minimum, maximum))
-    assert new_shape == x.shape, 'Not implemented'
-    result_tensor = math.clip(x_, min_, max_)
-    return NativeTensor(result_tensor, new_shape)
+    def _clip(x, minimum, maximum):
+        new_shape, (x_, min_, max_) = broadcastable_native_tensors(*tensor(x, minimum, maximum))
+        result_tensor = math.clip(x_, min_, max_)
+        return NativeTensor(result_tensor, new_shape)
+    return broadcast_op(_clip, tensor(x, minimum, maximum))
 
 
 def with_custom_gradient(function, inputs, gradient, input_index=0, output_index=None, name_base='custom_gradient_func'):
@@ -393,15 +396,15 @@ def conv(tensor, kernel, padding='same'):
 
 
 def shape(tensor):
-    return tensor.shape.sizes if isinstance(tensor, AbstractTensor) else math.shape(tensor)
+    return tensor.shape.sizes if isinstance(tensor, Tensor) else math.shape(tensor)
 
 
 def ndims(tensor):
-    return tensor.rank if isinstance(tensor, AbstractTensor) else math.ndims(tensor)
+    return tensor.rank if isinstance(tensor, Tensor) else math.ndims(tensor)
 
 
 def staticshape(tensor):
-    if isinstance(tensor, AbstractTensor):
+    if isinstance(tensor, Tensor):
         return tensor.shape.sizes
     else:
         return math.staticshape(tensor)
@@ -419,12 +422,8 @@ def to_complex(x):
     return tensor(x)._op1(math.to_complex)
 
 
-def gather(values, indices, batch_dims=0):
-    raise NotImplementedError()
-
-
 def unstack(tensor, axis=0):
-    assert isinstance(tensor, AbstractTensor)
+    assert isinstance(tensor, Tensor)
     return tensor.unstack(tensor.shape.names[axis])
 
 
@@ -440,21 +439,6 @@ def scatter(points, indices, values, shape, duplicates_handling='undefined'):
     raise NotImplementedError()
 
 
-def any(boolean_tensor, axis=None, keepdims=False):
-    raise NotImplementedError()
-
-
-def all(boolean_tensor, axis=None, keepdims=False):
-    if axis is None:
-        if isinstance(boolean_tensor, NativeTensor):
-            return math.all(boolean_tensor.tensor)
-        elif isinstance(boolean_tensor, CollapsedTensor):
-            return all(boolean_tensor.tensor, axis=axis)
-        elif isinstance(boolean_tensor, TensorStack):
-            return all([all(t, axis=None) for t in boolean_tensor.tensors])
-    raise NotImplementedError()
-
-
 def fft(x):
     raise NotImplementedError()
 
@@ -466,15 +450,15 @@ def ifft(k):
 
 
 def imag(complex):
-    raise NotImplementedError()
+    return complex._op1(math.imag)
 
 
-def real(complex: AbstractTensor):
-    return complex._op1(lambda t: math.real(t))
+def real(complex: Tensor):
+    return complex._op1(math.real)
 
 
-def cast(x, dtype):
-    raise NotImplementedError()
+def cast(x: Tensor, dtype):
+    return x._op1(lambda t: math.cast(x, dtype))
 
 
 def sin(x):
@@ -486,7 +470,7 @@ def cos(x):
 
 
 def dtype(x):
-    if isinstance(x, AbstractTensor):
+    if isinstance(x, Tensor):
         return x.dtype
     else:
         return math.dtype(x)
@@ -506,7 +490,7 @@ def sparse_tensor(indices, values, shape):
     raise NotImplementedError()
 
 
-def _invertible_standard_form(tensor: AbstractTensor):
+def _invertible_standard_form(tensor: Tensor):
     normal_order = tensor.shape.normal_order()
     native = tensor.native(normal_order.names)
     standard_form = (tensor.shape.batch.volume,) + tensor.shape.spatial.sizes + (tensor.shape.channel.volume,)
@@ -575,25 +559,26 @@ def _assert_close(tensor1, tensor2, rel_tolerance=1e-5, abs_tolerance=0):
         np.testing.assert_allclose(np1, np2, rel_tolerance, abs_tolerance)
 
 
-def conjugate_gradient(operator, y, x0, relative_tolerance: float = 1e-5, absolute_tolerance: float = 0.0, max_iterations: int = 1000, gradient: str = 'implicit', callback=None):
+def conjugate_gradient(operator, y, x0, relative_tolerance: float = 1e-5, absolute_tolerance: float = 0.0, max_iterations: int = 1000, gradient: str = 'implicit', callback=None, bake='sparse'):
     x0, y = tensor(x0, y)
     batch = combined_shape(y, x0).batch
     x0_native = math.reshape(x0.native(), (x0.shape.batch.volume, x0.shape.non_batch.volume))
     y_native = math.reshape(y.native(), (y.shape.batch.volume, y.shape.non_batch.volume))
     if callable(operator):
-        build_time = time.time()
-        x_track = as_sparse_linear_operation(x0)
         A_ = None
-        try:
-            Ax_track = operator(x_track)
-            if isinstance(Ax_track, SparseLinearOperation):
-                A_ = Ax_track.dependency_matrix
-                print("CG: matrix build time: %s" % (time.time() - build_time))
-            else:
-                warnings.warn("Could not create matrix for conjugate_gradient() because non-linear operations were used.")
-        except NotImplementedError as err:
-            warnings.warn("Could not create matrix for conjugate_gradient():\n%s" % err)
-            raise err
+        if bake == 'sparse':
+            build_time = time.time()
+            x_track = as_sparse_linear_operation(x0)
+            try:
+                Ax_track = operator(x_track)
+                if isinstance(Ax_track, SparseLinearOperation):
+                    A_ = Ax_track.dependency_matrix
+                    print("CG: matrix build time: %s" % (time.time() - build_time))
+                else:
+                    warnings.warn("Could not create matrix for conjugate_gradient() because non-linear operations were used.")
+            except NotImplementedError as err:
+                warnings.warn("Could not create matrix for conjugate_gradient():\n%s" % err)
+                raise err
         if A_ is None:
             def A_(native_x):
                 x = math.reshape(native_x, x0.shape.non_batch.sizes)

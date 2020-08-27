@@ -16,7 +16,7 @@ def expose_tensors(field_function, *proto_fields):
     return wrapper
 
 
-def conjugate_gradient(function, y: Grid, x0: Grid, relative_tolerance: float = 1e-5, absolute_tolerance: float = 0.0, max_iterations: int = 1000, gradient: str = 'implicit', callback=None):
+def conjugate_gradient(function, y: Grid, x0: Grid, relative_tolerance: float = 1e-5, absolute_tolerance: float = 0.0, max_iterations: int = 1000, gradient: str = 'implicit', callback=None, bake='sparse'):
     if callback is not None:
         def field_callback(x):
             x = x0.with_data(x)
@@ -24,8 +24,8 @@ def conjugate_gradient(function, y: Grid, x0: Grid, relative_tolerance: float = 
     else:
         field_callback = None
 
-    data_function = expose_tensors(function, y)
-    converged, x, iterations = math.conjugate_gradient(data_function, y.data, x0.data, relative_tolerance, absolute_tolerance, max_iterations, gradient, field_callback)
+    data_function = expose_tensors(function, x0)
+    converged, x, iterations = math.conjugate_gradient(data_function, y.data, x0.data, relative_tolerance, absolute_tolerance, max_iterations, gradient, field_callback, bake)
     return converged, x0.with_data(x), iterations
 
 

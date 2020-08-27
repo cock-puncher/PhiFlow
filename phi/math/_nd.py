@@ -10,7 +10,7 @@ from .backend import Extrapolation, extrapolation
 from . import _tensor_math as math
 from ._shape import CHANNEL_DIM, spatial_shape, channel_shape
 from ._tensor_math import broadcast_op, batch_stack, channel_stack
-from ._tensors import tensor, AbstractTensor, TensorStack, NativeTensor
+from ._tensors import tensor, Tensor, TensorStack, NativeTensor
 from ._helper import _get_pad_width, _contains_axis, _multi_roll
 
 
@@ -33,7 +33,7 @@ def indices_tensor(tensor, dtype=None):
         return math.to_float(idx)
 
 
-def normalize_to(target, source=1, epsilon=1e-5, batch_dims=1):
+def normalize_to(target: Tensor, source: Tensor, epsilon=1e-5):
     """
     Multiplies the target so that its total content matches the source.
 
@@ -42,9 +42,9 @@ def normalize_to(target, source=1, epsilon=1e-5, batch_dims=1):
     :param epsilon: small number to prevent division by zero or None.
     :return: normalized tensor of the same shape as target
     """
-    target_total = math.sum(target, axis=tuple(range(batch_dims, math.ndims(target))), keepdims=True)
+    target_total = math.sum(target, axis=target.shape.non_batch.names)
     denominator = math.maximum(target_total, epsilon) if epsilon is not None else target_total
-    source_total = math.sum(source, axis=tuple(range(batch_dims, math.ndims(source))), keepdims=True)
+    source_total = math.sum(source, axis=source.shape.non_batch.names)
     return target * (source_total / denominator)
 
 
@@ -135,7 +135,7 @@ def abs_square(complex):
 #     return math.sum(components, 0)
 
 
-def shift(x: AbstractTensor, offsets: tuple, axes: tuple or None = None, padding: Extrapolation or None = extrapolation.BOUNDARY, stack_dim='shift') -> list:
+def shift(x: Tensor, offsets: tuple, axes: tuple or None = None, padding: Extrapolation or None = extrapolation.BOUNDARY, stack_dim='shift') -> list:
     x = tensor(x)
     axes = axes if axes is not None else x.shape.spatial.names
     pad_lower = max(0, -min(offsets))
@@ -282,7 +282,7 @@ def spatial_sum(tensor):
     return summed
 
 
-def interpolate_linear(tensor: AbstractTensor, start, size):
+def interpolate_linear(tensor: Tensor, start, size):
     for sta, siz, dim in zip(start, size, tensor.shape.spatial.names):
         tensor = tensor.dimension(dim)[int(sta):int(sta)+siz + (1 if sta != 0 else 0)]
     upper_weight = start % 1
@@ -294,9 +294,9 @@ def interpolate_linear(tensor: AbstractTensor, start, size):
     return tensor
 
 
-def vec_abs(tensor: AbstractTensor):
+def vec_abs(tensor: Tensor):
     return math.sqrt(math.sum(tensor ** 2, axis=tensor.shape.channel.names))
 
 
-def vec_squared(tensor: AbstractTensor):
+def vec_squared(tensor: Tensor):
     return math.sum(tensor ** 2, axis=tensor.shape.channel.names)

@@ -9,7 +9,7 @@ from phi.struct.functions import mappable
 from ._field import Field, SampledField
 from phi.math.backend.tensorop import collapse
 from phi.math.backend import Extrapolation, general_grid_sample_nd
-from ..math import Shape, tensor, AbstractTensor
+from ..math import Shape, tensor, Tensor
 
 
 class Grid(SampledField, ABC):
@@ -37,7 +37,7 @@ class Grid(SampledField, ABC):
         return self.shape.spatial
 
     @property
-    def dx(self) -> AbstractTensor:
+    def dx(self) -> Tensor:
         return self.box.size / self.resolution
 
     @property
@@ -135,7 +135,7 @@ class CenteredGrid(Grid):
     def compatible(self, other):
         return isinstance(other, CenteredGrid) and other.box == self.box and other.resolution == self.resolution
 
-    def unstack(self, dimension=0):
+    def unstack(self, dimension):
         components = self.data.unstack(dimension=dimension)
         return [CenteredGrid(component, box=self.box) for i, component in enumerate(components)]
 

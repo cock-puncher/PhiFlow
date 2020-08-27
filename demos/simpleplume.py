@@ -15,7 +15,7 @@ def step():
     global velocity, density, divergence
     density = advect.semi_lagrangian(density, velocity, dt) + inflow
     velocity = advect.semi_lagrangian(velocity, velocity, dt) + (density * (0, buoyancy_factor)).at(velocity)
-    velocity = divergence_free(velocity, domain)
+    velocity = divergence_free(velocity)
     divergence = field.divergence(velocity)
 
 

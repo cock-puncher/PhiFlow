@@ -4,7 +4,7 @@ from abc import ABC
 
 from phi import math
 from phi.geom import Geometry
-from phi.math import Shape, AbstractTensor
+from phi.math import Shape, Tensor
 from phi.math.backend import Extrapolation
 
 
@@ -29,7 +29,7 @@ class Field:
         """
         return self.shape.spatial.rank
 
-    def sample_at(self, points, reduce_channels=()) -> AbstractTensor:
+    def sample_at(self, points, reduce_channels=()) -> Tensor:
         """
         Sample this field at the world-space locations (in physical units) given by points.
 
@@ -61,7 +61,7 @@ class Field:
         extrap = self.extrapolation if isinstance(self, SampledField) else representation.extrapolation
         return representation._op1(lambda old: extrap if isinstance(old, math.extrapolation.Extrapolation) else resampled)
 
-    def unstack(self, dimension=0) -> tuple:
+    def unstack(self, dimension: str) -> tuple:
         """
         Unstack the field along one of its dimensions.
         The dimension can be batch, spatial or channel.
@@ -144,14 +144,14 @@ class SampledField(Field, ABC):
         raise NotImplementedError(self)
 
     @property
-    def points(self) -> AbstractTensor:
+    def points(self) -> Tensor:
         return self.elements.center
 
     @property
-    def data(self) -> AbstractTensor:
+    def data(self) -> Tensor:
         raise NotImplementedError()
 
-    def with_data(self, data: AbstractTensor):
+    def with_data(self, data: Tensor):
         raise NotImplementedError()
 
     @property

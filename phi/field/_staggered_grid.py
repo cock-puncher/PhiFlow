@@ -10,7 +10,7 @@ from ..geom._box import AbstractBox, GridCell
 from ..geom._stack import GeometryStack
 from ..math import tensor, Shape
 from ..math._shape import CHANNEL_DIM
-from ..math._tensors import TensorStack, AbstractTensor
+from ..math._tensors import TensorStack, Tensor
 
 
 class StaggeredGrid(Grid):
@@ -21,10 +21,14 @@ class StaggeredGrid(Grid):
     Centered grids support arbitrary batch and spatial dimensions but only one channel dimension for the staggered vector components.
     """
 
-    def __init__(self, data, box=None, extrapolation=math.extrapolation.ZERO):
-        assert isinstance(data, TensorStack)
+    def __init__(self, data: TensorStack, box=None, extrapolation=math.extrapolation.ZERO):
+        if 'vector' not in data.shape:
+            if 'staggered' in data.shape:
+                data = data.staggered.as_channel('vector')
+            else:
+                raise ValueError("data needs to have 'vector' or 'staggered' dimension")
+        x = data.vector[0 if GLOBAL_AXIS_ORDER.is_x_first else -1]
         self._data = data
-        x = self._data.vector[0 if GLOBAL_AXIS_ORDER.is_x_first else -1]
         self._shape = x.shape.with_size('x', x.shape.get_size('x') - 1).expand(x.rank, 'vector', CHANNEL_DIM)
         Grid.__init__(self, self.resolution, box, extrapolation)
         assert_same_rank(self._data.shape.get_size('vector'), self.box, 'StaggeredGrid.data does not match box.')
@@ -107,8 +111,8 @@ class StaggeredGrid(Grid):
         tensor = math.channel_stack(centered)
         return CenteredGrid(tensor, self._box, self._extrapolation)
 
-    def unstack(self, dimension=0):
-        if dimension == 0:
+    def unstack(self, dimension='vector'):
+        if dimension == 'vector':
             result = []
             for dim, data in zip(self.resolution.spatial.names, self._data.vector.unstack()):
                 result.append(CenteredGrid(data, extend_symmetric(self.resolution, self.box, dim)[1], self.extrapolation))
@@ -179,14 +183,14 @@ class StaggeredGrid(Grid):
     #     return self.with_data(data)
 
 
-def unstack_staggered_tensor(data: AbstractTensor) -> AbstractTensor:
+def unstack_staggered_tensor(data: Tensor) -> Tensor:
     sliced = []
     for dim, component in zip(data.shape.spatial.names, data.unstack('vector')):
         sliced.append(component[{d: slice(None, -1) for d in data.shape.spatial.without(dim).names}])
     return math.channel_stack(sliced, 'vector')
 
 
-def stack_staggered_components(data: AbstractTensor) -> AbstractTensor:
+def stack_staggered_components(data: Tensor) -> Tensor:
     padded = []
     for dim, component in zip(data.shape.spatial.names, data.unstack('vector')):
         padded.append(math.pad(component, {d: (0, 1) for d in data.shape.spatial.without(dim).names}))

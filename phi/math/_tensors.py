@@ -8,7 +8,7 @@ from .backend import math as native_math
 from ._shape import Shape, infer_shape, CHANNEL_DIM, BATCH_DIM, SPATIAL_DIM, EMPTY_SHAPE
 
 
-class AbstractTensor:
+class Tensor:
     """
     Tensors with grouped and named dimensions.
 
@@ -40,18 +40,18 @@ class AbstractTensor:
         raise NotImplementedError()
 
     @property
-    def shape(self):
+    def shape(self) -> Shape:
         raise NotImplementedError()
 
     def _with_shape_replaced(self, new_shape):
         raise NotImplementedError()
 
     @property
-    def ndims(self):
+    def ndims(self) -> int:
         return self.shape.rank
 
     @property
-    def rank(self):
+    def rank(self) -> int:
         return self.shape.rank
 
     def __len__(self):
@@ -258,7 +258,7 @@ class AbstractTensor:
         return iter(self.native())
 
     def _tensor(self, other):
-        if isinstance(other, AbstractTensor):
+        if isinstance(other, Tensor):
             return other
         elif isinstance(other, Shape):
             assert self.shape.channel.rank == 1, "Only single-channel tensors support implicit casting from Shape to tensor"
@@ -282,9 +282,9 @@ class AbstractTensor:
             else:
                 raise ValueError("Cannot broadcast object of rank %d to tensor with shape %s" % (native_math.ndims(other), self.shape))
 
-    def _op2(self, other, native_function):
+    def _op2(self, other, native_function, handle_special=False):
         other = self._tensor(other)
-        if not isinstance(other, (NativeTensor, TensorStack, CollapsedTensor)):
+        if not isinstance(other, (NativeTensor, CollapsedTensor)) and not handle_special:
             return NotImplemented
         new_shape, (native1, native2) = broadcastable_native_tensors(self, other)
         result_tensor = native_function(native1, native2)
@@ -317,19 +317,26 @@ class _TensorDim:
     def size(self):
         return self.tensor.shape.sizes[self.index]
 
-    def as_batch(self):
+    def as_batch(self, name: str or None = None):
+        return self._as(BATCH_DIM, name)
+
+    def as_spatial(self, name: str or None = None):
+        return self._as(SPATIAL_DIM, name)
+
+    def as_channel(self, name: str or None = None):
+        return self._as(CHANNEL_DIM, name)
+
+    def _as(self, dim_type: int, name: str or None):
         shape = self.tensor.shape
         new_types = list(shape.types)
-        new_types[self.index] = BATCH_DIM
-        new_shape = Shape(shape.sizes, shape.names, new_types)
+        new_types[self.index] = dim_type
+        new_names = shape.names
+        if name is not None:
+            new_names = list(new_names)
+            new_names[self.index] = name
+        new_shape = Shape(shape.sizes, new_names, new_types)
         return self.tensor._with_shape_replaced(new_shape)
 
-    def as_spatial(self):
-        shape = self.tensor.shape
-        new_types = list(shape.types)
-        new_types[self.index] = SPATIAL_DIM
-        new_shape = Shape(shape.sizes, shape.names, new_types)
-        return self.tensor._with_shape_replaced(new_shape)
 
     @property
     def dim_type(self):
@@ -354,10 +361,10 @@ class _TensorDim:
         self.tensor[{self.name: key}] = value
 
 
-class NativeTensor(AbstractTensor):
+class NativeTensor(Tensor):
 
     def __init__(self, native_tensor, shape):
-        assert not isinstance(native_tensor, AbstractTensor)
+        assert not isinstance(native_tensor, Tensor)
         assert isinstance(shape, Shape)
         assert native_math.staticshape(native_tensor) == shape.sizes
         self.tensor = native_tensor
@@ -387,6 +394,7 @@ class NativeTensor(AbstractTensor):
         return self._shape
 
     def _with_shape_replaced(self, new_shape):
+        new_shape = Shape(self._shape.sizes, new_shape.names, new_shape.types)
         return NativeTensor(self.tensor, new_shape)
 
     def _getitem(self, selection_dict):
@@ -410,12 +418,12 @@ class NativeTensor(AbstractTensor):
         return NativeTensor(native_function(self.native()), self.shape)
 
 
-class CollapsedTensor(AbstractTensor):
+class CollapsedTensor(Tensor):
     """
     Tiled / Repeated tensor along additional axes.
     """
 
-    def __init__(self, tensor: AbstractTensor, shape: Shape):
+    def __init__(self, tensor: Tensor, shape: Shape):
         for name in tensor.shape.names:
             assert name in shape
         for size, name, dim_type in tensor.shape.dimensions:
@@ -472,7 +480,7 @@ class CollapsedTensor(AbstractTensor):
         return CollapsedTensor(self.tensor._op1(native_function), self._shape)
 
 
-class TensorStack(AbstractTensor):
+class TensorStack(Tensor):
     """
     Implicit stack of multiple tensors.
     List of tensors, does not store stacked tensor in memory.
@@ -480,7 +488,7 @@ class TensorStack(AbstractTensor):
 
     def __init__(self, tensors, dim_name, dim_type, keep_separate=False):
         for tensor in tensors:
-            assert isinstance(tensor, AbstractTensor)
+            assert isinstance(tensor, Tensor)
             assert tensor.dtype == tensors[0].dtype
             # assert tensor.shape == tensors[0].shape or keep_separate
         self.tensors = tuple(tensors)
@@ -513,11 +521,11 @@ class TensorStack(AbstractTensor):
             return native
         return self._cache().native(order=order)
 
-    def _with_shape_replaced(self, new_shape):
-        assert isinstance(new_shape, Shape)
-        inner_shape = new_shape.without(self.stack_dim_name)
+    def _with_shape_replaced(self, new_shape: Shape):
+        stack_dim_name = new_shape.names[self._shape.index(self.stack_dim_name)]
+        inner_shape = new_shape.without(stack_dim_name)
         tensors = [t._with_shape_replaced(inner_shape) for t in self.tensors]
-        return TensorStack(tensors, self.stack_dim_name, new_shape.get_type(self.stack_dim_name))
+        return TensorStack(tensors, stack_dim_name, new_shape.get_type(stack_dim_name), keep_separate=self.keep_separate)
 
     def _getitem(self, selection_dict):
         if (self.stack_dim_name not in selection_dict or len(selection_dict) != 1) and not self.requires_broadcast:
@@ -543,7 +551,12 @@ class TensorStack(AbstractTensor):
         if dimension == self.stack_dim_name:
             return self.tensors
         else:
-            return self._cache().unstack(dimension=dimension)
+            if self.keep_separate:
+                unstacked = [t.unstack(dimension) for t in self.tensors]
+                result = [TensorStack(items, self.stack_dim_name, self.stack_dim_type, keep_separate=self.keep_separate) for items in zip(*unstacked)]
+                return result
+            else:
+                return self._cache().unstack(dimension=dimension)
 
     def _op2(self, other, native_function):
         other = self._tensor(other)
@@ -555,14 +568,14 @@ class TensorStack(AbstractTensor):
                 tensors = [t._op2(other, native_function) for t in self.tensors]
             return TensorStack(tensors, self.stack_dim_name, self.stack_dim_type, self.keep_separate)
         else:
-            return AbstractTensor._op2(self, other, native_function)
+            return Tensor._op2(self, other, native_function, handle_special=True)
 
     def _op1(self, native_function):
         if self.requires_broadcast:
             tensors = [t._op1(native_function) for t in self.tensors]
             return TensorStack(tensors, self.stack_dim_name, self.stack_dim_type, self.keep_separate)
         else:
-            return AbstractTensor._op1(self, native_function)
+            return Tensor._op1(self, native_function)
 
     @property
     def requires_broadcast(self):
@@ -577,7 +590,7 @@ def tensor(*objects, names=None, infer_dimension_types=True, batch_dims=None, sp
 
 
 def _tensor(obj, names=None, infer_dimension_types=True, batch_dims=None, spatial_dims=None, channel_dims=None):
-    if isinstance(obj, AbstractTensor):
+    if isinstance(obj, Tensor):
         return obj
     if isinstance(obj, np.ndarray) and obj.dtype != np.object:
         if infer_dimension_types:
@@ -612,7 +625,7 @@ def broadcastable_native_tensors(*tensors):
     """
     Expands and transposes the dimensions of the given tensors so that they all have the same dimension order.
 
-    :param tensors: sequence of AbstractTensors
+    :param tensors: sequence of Tensors
     :return: (shape, native tensors)
     """
     broadcast_shape = combined_shape(*tensors)
@@ -621,7 +634,7 @@ def broadcastable_native_tensors(*tensors):
 
 
 def shapeof(tensor):
-    if isinstance(tensor, AbstractTensor):
+    if isinstance(tensor, Tensor):
         return tensor.shape
     else:
         shape = native_math.staticshape(tensor)
@@ -632,7 +645,7 @@ def combined_shape(*shapes_or_tensors, allow_inconsistencies=False):
     assert len(shapes_or_tensors) > 0
     shapes = []
     for shape in shapes_or_tensors:
-        if isinstance(shape, AbstractTensor):
+        if isinstance(shape, Tensor):
             shapes.append(shape.shape)
         elif isinstance(shape, Shape):
             shapes.append(shape)

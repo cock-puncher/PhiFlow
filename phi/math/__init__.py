@@ -17,13 +17,13 @@ Main classes:
 * Shape
 """
 
-from .backend import DYNAMIC_BACKEND, extrapolation
+from .backend import DYNAMIC_BACKEND, extrapolation, Extrapolation
 from .backend._scipy_backend import SCIPY_BACKEND
 
 from phi.struct.struct_backend import StructBroadcastBackend
 
-from ._shape import Shape, define_shape, spatial_shape, infer_shape
-from ._tensors import tensor, AbstractTensor, combined_shape, AbstractTensor as Tensor
+from ._shape import Shape, define_shape, spatial_shape, infer_shape, EMPTY_SHAPE
+from ._tensors import tensor, Tensor, combined_shape, Tensor as Tensor
 from ._tensor_math import (
     is_tensor, as_tensor,
     copy,
@@ -38,7 +38,6 @@ from ._tensor_math import (
     divide_no_nan,
     where,
     sum, mean, std,
-    py_func,
     zeros_like, ones_like,
     dot,
     matmul,
@@ -54,7 +53,6 @@ from ._tensor_math import (
     conv,
     shape, staticshape, ndims,
     to_float, to_int, to_complex,
-    gather,
     unstack,
     boolean_mask,
     isfinite,

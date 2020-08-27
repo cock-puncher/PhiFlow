@@ -30,7 +30,8 @@ def split_multi_mode_pad(tensor_rank, pad_settings):
         if np.sum(np.array(widths)) > 0:
             result.append(PadSettings(widths, pass_mode))
     if np.sum(np.array(pad_width)) > 0 and len(result) == 0:
-        split_multi_mode_pad(tensor_rank, pad_settings)
+        raise AssertionError()
+        split_multi_mode_pad(tensor_rank, pad_settings)  # TODO recursion
 
     return result
 
@@ -96,11 +97,12 @@ def general_grid_sample_nd(grid, coords, boundary, math, reduce='linear'):
 
 
 def pad_constant_boundaries(grid, coords, boundary, math):
+    boundary_ = boundary
     boundary = CT(boundary)
     spatial_rank = math.staticshape(coords)[-1]
     pad_widths = [[1 if isinstance(boundary[dim, upper], extrapolation.ConstantExtrapolation) else 0 for upper in (False, True)] for dim in range(-spatial_rank-1, -1)]
     lower_pads = [lu[0] for lu in pad_widths]
-    grid = math.pad(grid, [[0, 0]] + pad_widths + [[0, 0]], boundary)
+    grid = math.pad(grid, [[0, 0]] + pad_widths + [[0, 0]], boundary_)
     if sum(lower_pads) > 0:
         coords = math.add(coords, math.cast(lower_pads, math.dtype(coords)))
     boundary = [[extrapolation.BOUNDARY if isinstance(boundary[dim, upper], extrapolation.ConstantExtrapolation) else boundary[dim, upper] for upper in (False, True)] for dim in range(-spatial_rank-1, -1)]

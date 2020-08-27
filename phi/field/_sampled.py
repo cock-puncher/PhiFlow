@@ -19,18 +19,18 @@ class ArbitrarilySampledField(Field):
     def sample_at(self, points):
         raise NotImplementedError()
 
-    def at(self, other_field):
-        if isinstance(other_field, SampledField) and other_field.sample_points is self.sample_points:
-            return self
-        elif isinstance(other_field, Domain):
-            return self._grid_sample(other_field.box, other_field.resolution, 1)
-        elif isinstance(other_field, CenteredGrid):
-            return self._grid_sample(other_field.box, other_field.resolution, other_field._batch_size)
-        elif isinstance(other_field, StaggeredGrid):
-            return self._stagger_sample(other_field.box, other_field.resolution)
-
-        else:
-            return self
+    # def at(self, other_field):
+    #     if isinstance(other_field, SampledField) and other_field.sample_points is self.sample_points:
+    #         return self
+    #     elif isinstance(other_field, Domain):
+    #         return self._grid_sample(other_field.box, other_field.resolution, 1)
+    #     elif isinstance(other_field, CenteredGrid):
+    #         return self._grid_sample(other_field.box, other_field.resolution, other_field._batch_size)
+    #     elif isinstance(other_field, StaggeredGrid):
+    #         return self._stagger_sample(other_field.box, other_field.resolution)
+    #
+    #     else:
+    #         return self
 
     def _grid_sample(self, box, resolution, batch_size):
         """

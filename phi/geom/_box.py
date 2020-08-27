@@ -6,7 +6,7 @@ from ._geom import Geometry
 from ._transform import rotate
 from ..math import tensor, combined_shape, spatial_shape
 from ..math._shape import CHANNEL_DIM
-from ..math._tensors import NativeTensor, TensorStack, AbstractTensor
+from ..math._tensors import NativeTensor, TensorStack, Tensor
 
 
 class AbstractBox(Geometry):
@@ -23,19 +23,19 @@ class AbstractBox(Geometry):
         raise NotImplementedError()
 
     @property
-    def size(self) -> AbstractTensor:
+    def size(self) -> Tensor:
         raise NotImplementedError(self)
 
     @property
-    def half_size(self) -> AbstractTensor:
+    def half_size(self) -> Tensor:
         raise NotImplementedError(self)
 
     @property
-    def lower(self) -> AbstractTensor:
+    def lower(self) -> Tensor:
         raise NotImplementedError(self)
 
     @property
-    def upper(self) -> AbstractTensor:
+    def upper(self) -> Tensor:
         raise NotImplementedError(self)
 
     def bounding_radius(self):
@@ -65,7 +65,7 @@ For inside locations it is `-max(abs(l - s))`.
         center = 0.5 * (self.lower + self.upper)
         extent = self.upper - self.lower
         distance = math.abs(location - center) - extent * 0.5
-        return math.max(distance, axis=0)
+        return math.max(distance, 'vector')
 
     def get_lower(self, axis):
         return self._get(self.lower, axis)

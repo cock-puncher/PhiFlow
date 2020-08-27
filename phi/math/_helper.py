@@ -1,4 +1,4 @@
-from ._tensors import AbstractTensor
+from ._tensors import Tensor
 from .backend.tensorop import collapsed_gather_nd
 
 
@@ -17,7 +17,7 @@ def _get_pad_width(rank, axis_widths=(1, 1)):
 
 
 def _multi_roll(tensor, roll_name, relative_shifts, diminish_others=(0, 0), names=None, base_selection={}):
-    assert isinstance(tensor, AbstractTensor), tensor
+    assert isinstance(tensor, Tensor), tensor
     assert len(relative_shifts) >= 2
     total_shift = max(relative_shifts) - min(relative_shifts)
     slice_others = slice(diminish_others[0], -diminish_others[1] if diminish_others[1] != 0 else None)

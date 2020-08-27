@@ -3,7 +3,7 @@ import warnings
 from phi.geom import Geometry, GLOBAL_AXIS_ORDER
 from phi.field import Field, GeometryMask, ConstantField
 from phi import math, struct
-from phi.physics import State, Physics, StateDependency
+from .physics import State, Physics, StateDependency
 
 GROW = 'grow'
 ADD = 'add'
@@ -45,7 +45,7 @@ class FieldEffect(State):
 def effect_applied(effect, field, dt):
     effect_field = effect.field.at(field)
     if effect._mode == GROW:
-        return field + math.mul(effect_field, dt)
+        return field + effect_field * dt
     elif effect._mode == ADD:
         return field + effect_field
     elif effect._mode == FIX:
@@ -57,11 +57,11 @@ def effect_applied(effect, field, dt):
 
 
 # pylint: disable-msg = invalid-name
-Inflow = lambda geometry, rate=1.0, target='density': FieldEffect(GeometryMask(geometry, antialias=True) * rate, target, GROW, tags=('inflow', 'effect'))
-Accelerator = lambda geometry, acceleration: FieldEffect(GeometryMask(geometry, antialias=True) * acceleration, ('velocity',), GROW, tags=('fan', 'effect'))
+Inflow = lambda geometry, rate=1.0, target='density': FieldEffect(GeometryMask(geometry) * rate, target, GROW, tags=('inflow', 'effect'))
+Accelerator = lambda geometry, acceleration: FieldEffect(GeometryMask(geometry) * acceleration, ('velocity',), GROW, tags=('fan', 'effect'))
 ConstantVelocity = lambda geometry, velocity: FieldEffect(ConstantField(velocity), bounds=geometry, targets=('velocity',), mode=FIX, tags=('effect',))
-HeatSource = lambda geometry, rate, name=None: FieldEffect(GeometryMask(geometry, antialias=True) * rate, ('temperature',), GROW, name=name)
-ColdSource = lambda geometry, rate, name=None: FieldEffect(GeometryMask(geometry, antialias=True) * -rate, ('temperature',), GROW, name=name)
+HeatSource = lambda geometry, rate, name=None: FieldEffect(GeometryMask(geometry) * rate, ('temperature',), GROW, name=name)
+ColdSource = lambda geometry, rate, name=None: FieldEffect(GeometryMask(geometry) * -rate, ('temperature',), GROW, name=name)
 
 
 def Fan(*args, **kwargs):
@@ -82,31 +82,11 @@ class Gravity(State):
         assert gravity is not None
         return gravity
 
-    def __add__(self, other):
-        if other is 0:
-            return self
-        assert isinstance(other, Gravity), type(other)
-        if self._batch_size is not None:
-            assert self._batch_size == other._batch_size
-        # Add gravity
-        if math.is_scalar(self.gravity) and math.is_scalar(other.gravity):
-            return Gravity(self.gravity + other.gravity)
-        else:
-            rank = math.staticshape(other.gravity)[-1] if math.is_scalar(self.gravity)\
-                else math.staticshape(self.gravity)[-1]
-            sum_tensor = gravity_tensor(self, rank) + gravity_tensor(other, rank)
-            return Gravity(sum_tensor)
-
-    __radd__ = __add__
-
 
 def gravity_tensor(gravity, rank):
     if isinstance(gravity, Gravity):
         gravity = gravity.gravity
-    if math.is_scalar(gravity):
-        gravity = gravity * GLOBAL_AXIS_ORDER.up_vector(rank)
-    assert math.staticshape(gravity)[-1] == rank
-    return math.to_float(math.expand_dims(gravity, 0, rank+2-len(math.staticshape(gravity))))
+    return gravity * GLOBAL_AXIS_ORDER.up_vector(rank)
 
 
 class FieldPhysics(Physics):

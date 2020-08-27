@@ -1,63 +1,43 @@
 from phi import math, struct
-from phi.geom import GLOBAL_AXIS_ORDER
+from phi.geom import GLOBAL_AXIS_ORDER, Geometry
 
 from ._analytic import AnalyticField
+from ..math import Shape
 
 
 class AngularVelocity(AnalyticField):
 
-    def __init__(self, location, strength=1.0, **kwargs):
-        AnalyticField.__init__(self, rank=None, **struct.kwargs(locals()))
+    def __init__(self, location: math.Tensor, strength=1.0, falloff: callable = None):
+        assert location.shape.channel.names == ('vector',), "location must have a single channel dimension called 'vector'"
+        assert location.shape.spatial.is_empty, "location tensor cannot have any spatial dimensions"
+        self.location = location
+        self.strength = strength
+        self.falloff = falloff
+        self._shape = location.shape.combined(math.spatial_shape([1] * location.vector.size))
 
-    def sample_at(self, points):
-        points_rank = math.spatial_rank(points)
-        src_rank = math.spatial_rank(self.location)
-        # --- Expand shapes to format (batch_size, points_dims..., src_dims..., channels) ---
-        points = math.expand_dims(points, axis=-2, number=src_rank)
-        src_location = math.expand_dims(self.location, axis=-3, number=points_rank)
-        src_strength = math.expand_dims(self.strength, axis=-1)
-        if math.ndims(src_strength) == 1:
-            src_strength = math.expand_dims(src_strength, axis=-2)
-        src_strength = math.expand_dims(src_strength, axis=-3, number=points_rank)
-        src_axes = tuple(range(-2, -2 - src_rank, -1))
-        # --- Compute distances and falloff ---
-        distances = points - src_location
-        if self.falloff is not None:
-            falloff_value = self.falloff(distances)
-            strength = src_strength * falloff_value
-        else:
-            strength = src_strength
-        # --- Compute velocities ---
-        if math.staticshape(points)[-1] == 2:  # Curl in 2D
-            dist_1, dist_2 = math.unstack(distances, axis=-1)
+    def sample_at(self, points, reduce_channels=()) -> math.Tensor:
+        if isinstance(points, Geometry):
+            points = points.center  # TODO correct for cells very close to location
+        distances = points - self.location
+        strength = self.strength if self.falloff is None else self.strength * self.falloff(distances)
+        if points.vector.size == 2:  # Curl in 2D
+            dist_0, dist_1 = distances.vector.unstack()
+            if reduce_channels:
+                assert len(reduce_channels) == 1
+                dist_0 = dist_0[{reduce_channels[0]: 0}]
+                dist_1 = dist_1[{reduce_channels[0]: 1}]
             if GLOBAL_AXIS_ORDER.is_x_first:
-                velocity = strength * math.stack([-dist_2, dist_1], axis=-1)
+                velocity = strength * math.channel_stack([-dist_1, dist_0], 'vector')
             else:
-                velocity = strength * math.stack([dist_2, -dist_1], axis=-1)
-        elif math.staticshape(points)[-1] == 3:  # Curl in 3D
+                velocity = strength * math.channel_stack([dist_1, -dist_0], 'vector')
+        elif points.vector.size == 3:  # Curl in 3D
             raise NotImplementedError('not yet implemented')
         else:
             raise AssertionError('Vector product not available in > 3 dimensions')
-        velocity = math.sum(velocity, axis=src_axes)
+        # velocity = math.vec_prod(strength, distances)
+        velocity = math.sum(velocity, self.location.shape.batch.without(points.shape))
         return velocity
 
     @property
-    def component_count(self):
-        return self.rank
-
-    @struct.variable()
-    def location(self, loc):
-        loc = math.to_float(loc)
-        assert math.staticshape(loc)[-1] in (2, 3)
-        if math.ndims(loc) < 2:
-            loc = math.expand_dims(loc, axis=0, number=2 - math.ndims(loc))
-        return loc
-
-    @struct.variable()
-    def strength(self, strength):
-        return math.to_float(strength)
-
-    @struct.constant()
-    def falloff(self, falloff):
-        assert callable(falloff) or falloff is None
-        return falloff
+    def shape(self) -> Shape:
+        return self._shape

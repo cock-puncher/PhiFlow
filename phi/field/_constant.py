@@ -12,22 +12,15 @@ class ConstantField(Field):
         data = _convert_constant_to_data(value)
         Field.__init__(self, **struct.kwargs(locals(), ignore='value'))
 
-    def sample_at(self, points):
+    def sample_at(self, points, reduce_channels=()) -> math.Tensor:
         return _expand_axes(self.data, points)
 
     @property
     def component_count(self):
         return self.data.shape[-1]
 
-    def unstack(self, dimension=0):
+    def unstack(self, dimension: str):
         return [ConstantField(c, '%s[%d]' % (self.name, i), batch_size=self._batch_size) for i, c in enumerate(math.unstack(self.data, -1))]
-
-    @property
-    def points(self):
-        return None
-
-    def compatible(self, other_field):
-        return True
 
     def __repr__(self):
         return repr(self.data)

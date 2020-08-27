@@ -4,16 +4,13 @@ from phi.math.backend import Backend
 from phi import math, struct
 from phi.geom import assert_same_rank
 
-from ._field import Field
+from ._field import Field, SampledField
+from ..math import Shape
 
 
 class AnalyticField(Field, ABC):
 
-    @property
-    def elements(self):
-        return None
-
-    def unstack(self, dimension=0):
+    def unstack(self, dimension):
         components = []
         size = self.shape.get_size(dimension)
         for i in range(size):
@@ -23,10 +20,15 @@ class AnalyticField(Field, ABC):
         return components
 
     def _op2(self, other, operator):
-        pass
+        if isinstance(other, SampledField):
+            self_sampled = self.at(other)
+            data = operator(self_sampled.data, other.data)
+            return other.with_data(data)
+        new_shape = self.shape.combined(other.shape)
+        return _SymbolicOpField(new_shape, operator, [self, other])
 
     def _op1(self, operator):
-        pass
+        return _SymbolicOpField(self.shape, operator, [self])
 
 
 class SymbolicFieldBackend(Backend):
@@ -57,37 +59,27 @@ class SymbolicFieldBackend(Backend):
 
 class _SymbolicOpField(AnalyticField):
 
-    def __init__(self, function, function_args, **kwargs):
+    def __init__(self, shape, function, function_args):
+        self.function = function
+        self.function_args = function_args
         fields = filter(lambda arg: isinstance(arg, Field), function_args)
-        AnalyticField.__init__(self, _determine_rank(fields), name=function.__name__, **struct.kwargs(locals(), ignore='fields'))
         self.fields = tuple(fields)
-        self.channels = _determine_component_count(function_args)
+        self._shape = shape
 
-    @struct.constant()
-    def function_args(self, args):
-        return args
+    @property
+    def shape(self) -> Shape:
+        return self._shape
 
-    @struct.constant()
-    def function(self, function):
-        return function
-
-    def at(self, other_field):
+    def sample_at(self, points, reduce_channels=()) -> math.Tensor:
         args = []
         for arg in self.function_args:
             if isinstance(arg, Field):
-                arg = arg.at(other_field)
+                arg = arg.sample_at(points, reduce_channels=reduce_channels)
             args.append(arg)
         applied = self.function(*args)
         return applied
 
-    def sample_at(self, points):
-        raise NotImplementedError()
-
-    @property
-    def component_count(self):
-        return self.channels
-
-    def unstack(self):
+    def unstack(self, dimension):
         unstacked = {}
         for arg in self.function_args:
             if isinstance(arg, Field):
@@ -99,44 +91,4 @@ class _SymbolicOpField(AnalyticField):
             assert len(unstacked[arg]) == self.component_count
         result = [_SymbolicOpField(self.function, [unstacked[arg][i] for arg in self.function_args]) for i in range(self.component_count)]
         return result
-
-    @property
-    def points(self):
-        if len(self.fields) == 0:
-            return None
-        else:
-            return self.fields[0].points
-
-    def compatible(self, other_field):
-        if len(self.fields) == 0:
-            return True
-        else:
-            return self.fields[0].compatible(other_field)
-
-
-def _determine_rank(fields):
-    rank = None
-    for field in fields:
-        if rank is None:
-            rank = field.rank
-        else:
-            assert_same_rank(rank, field.rank, 'All fields must have the same rank')
-    return rank
-
-
-def _determine_component_count(args):
-    result = None
-    for arg in args:
-        arg_channels = None
-        if isinstance(arg, Field):
-            arg_channels = arg.component_count
-        elif math.is_tensor(arg) and math.ndims(arg) > 0:
-            arg_channels = arg.shape[-1]
-        if result is None:
-            result = arg_channels
-        elif result == 1 and arg_channels is not None:
-            result = arg_channels
-        else:
-            assert result == arg_channels or arg_channels is None
-    return result
 

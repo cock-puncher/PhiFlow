@@ -52,7 +52,7 @@ Noise can be used as an initializer for CenteredGrids or StaggeredGrids.
         array = math.to_float(array)
         return array
 
-    def unstack(self, dimension=0):
+    def unstack(self, dimension):
         if isinstance(dimension, int):
             count = self.shape.get_size(dimension)
             reduced_shape = self.shape.without(dimension)

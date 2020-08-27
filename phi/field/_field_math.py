@@ -2,7 +2,7 @@ import numpy as np
 from phi import math
 from phi.geom import AABox
 from . import StaggeredGrid
-from ._field import Field
+from ._field import Field, SampledField
 from ._grid import CenteredGrid, Grid, _gradient_extrapolation
 from ..math import tensor
 
@@ -51,6 +51,11 @@ def divergence(field: StaggeredGrid):
 
 def mean(field: Grid):
     return math.mean(field.data, field.shape.spatial.names)
+
+
+def normalize(field: SampledField, norm: SampledField, epsilon=1e-5):
+    data = math.normalize_to(field.data, norm.data, epsilon)
+    return field.with_data(data)
 
 
 def pad(grid: Grid, widths):

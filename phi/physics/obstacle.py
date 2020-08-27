@@ -9,6 +9,10 @@ from .physics import Physics, State
 
 @struct.definition()
 class Obstacle(State):
+    """
+    An obstacle defines boundary conditions inside a geometry.
+    It can also have a linear and angular velocity.
+    """
 
     def __init__(self, geometry, material=CLOSED, velocity=0, tags=('obstacle',), **kwargs):
         State.__init__(self, **struct.kwargs(locals()))

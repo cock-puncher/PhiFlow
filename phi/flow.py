@@ -29,6 +29,7 @@ from phi.physics.material import Material, OPEN, CLOSED, PERIODIC, NO_SLIP, NO_S
 from phi.physics.common_physics import diffuse
 from phi.physics import advect
 from phi.physics.fluid import divergence_free, masked_laplace
+from phi.physics.obstacle import Obstacle
 
 from phi.data.fluidformat import write_sim_frame
 

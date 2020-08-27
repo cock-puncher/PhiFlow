@@ -1,12 +1,12 @@
 import numpy as np
 
 from .backend import DYNAMIC_BACKEND as math, Extrapolation, extrapolation
-from ._tensors import AbstractTensor, NativeTensor, combined_shape, TensorStack
+from ._tensors import Tensor, NativeTensor, combined_shape, TensorStack
 
 
-class SparseLinearOperation(AbstractTensor):
+class SparseLinearOperation(Tensor):
 
-    def __init__(self, source: AbstractTensor, dependency_matrix, shape):
+    def __init__(self, source: Tensor, dependency_matrix, shape):
         self.source = source
         self.dependency_matrix = dependency_matrix
         self._shape = shape
@@ -71,7 +71,7 @@ class SparseLinearOperation(AbstractTensor):
             return SparseLinearOperation(self.source, new_matrix, broadcast_shape)
 
 
-def as_sparse_linear_operation(tensor: AbstractTensor):
+def as_sparse_linear_operation(tensor: Tensor):
     tracking_shape = tensor.shape.non_batch
     idx = math.range(tracking_shape.volume)
     ones = math.ones_like(idx)
