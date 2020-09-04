@@ -8,8 +8,8 @@ from phi.geom import assert_same_rank
 from phi.struct.functions import mappable
 from ._field import Field, SampledField
 from phi.math.backend.tensorop import collapse
-from phi.math.backend import Extrapolation, general_grid_sample_nd
-from ..math import Shape, tensor, Tensor
+from phi.math.backend import general_grid_sample_nd
+from ..math import Shape, tensor, Tensor, Extrapolation
 
 
 class Grid(SampledField, ABC):

@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from .backend import math as native_math
+from ._tensors import Tensor, NativeTensor, CollapsedTensor, TensorStack, tensor
+from . import _tensor_math as math
+
 
 class IncompatibleExtrapolations(ValueError):
     def __init__(self, extrapolation1, extrapolation2):
@@ -19,26 +23,70 @@ class Extrapolation:
         """
         raise NotImplementedError()
 
+    def pad(self, value: Tensor, widths: dict) -> Tensor:
+        """
+        Pads a tensor using this extrapolation.
+
+        :param value: tensor to be padded
+        :param widths: name: str -> (lower: int, upper: int)
+        """
+        raise NotImplementedError()
+
+    def transform_coordinates(self, coordinates, shape):
+        return NotImplemented
+
+    def evaluate(self, value: Tensor, coordinates):
+        raise NotImplementedError()
+
 
 class ConstantExtrapolation(Extrapolation):
 
     def __init__(self, value):
-        self.value = value
+        self.value = tensor(value)
 
     def __repr__(self):
         return repr(self.value)
 
     def to_dict(self) -> dict:
-        from . import math
-        value = math.numpy(self.value)
-        return {'type': 'constant', 'value': value}
+        return {'type': 'constant', 'value': self.value.numpy()}
 
     def gradient(self):
         return ZERO
 
+    def pad(self, value: Tensor, widths: dict):
+        value = tensor(value)
+        if isinstance(value, NativeTensor):
+            native = value.tensor
+            ordered_pad_widths = value.shape.order(widths, default=(0, 0))
+            result_tensor = native_math.pad(native, ordered_pad_widths, 'constant', self.value)
+            new_shape = value.shape.with_sizes(native_math.staticshape(result_tensor))
+            return NativeTensor(result_tensor, new_shape)
+        elif isinstance(value, CollapsedTensor):
+            if value.tensor.shape.volume > 1 or not math.close(self.value, value.tensor):
+                return self.pad(value.expand(), widths)
+            else:  # Stays constant value, only extend shape
+                new_sizes = []
+                for size, dim, dim_type in value.shape.dimensions:
+                    if dim not in widths:
+                        new_sizes.append(size)
+                    else:
+                        delta = sum(widths[dim]) if isinstance(widths[dim], (tuple, list)) else 2 * widths[dim]
+                        new_sizes.append(size + int(delta))
+                new_shape = value.shape.with_sizes(new_sizes)
+                return CollapsedTensor(value.tensor, new_shape)
+        # elif isinstance(value, SparseLinearOperation):
+        #     return pad_operator(value, pad_width, mode)
+        elif isinstance(value, TensorStack):
+            if not value.requires_broadcast:
+                return self.pad(value._cache(), widths)
+            inner_widths = {dim: w for dim, w in widths.items() if dim != value.stack_dim_name}
+            tensors = [self.pad(t, inner_widths) for t in value.tensors]
+            return TensorStack(tensors, value.stack_dim_name, value.stack_dim_type, value.keep_separate)
+        else:
+            raise NotImplementedError()
+
     def __eq__(self, other):
-        from . import math
-        return isinstance(other, ConstantExtrapolation) and math.all(math.equal(other.value, self.value))
+        return isinstance(other, ConstantExtrapolation) and math.close(self.value, other.value)
 
     def is_zero(self):
         return self == ZERO

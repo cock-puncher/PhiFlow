@@ -1,7 +1,5 @@
 import numpy as np
 
-from . import _extrapolation as extrapolation
-
 
 class Backend:
 
@@ -135,12 +133,13 @@ class Backend:
     def concat(self, values, axis):
         raise NotImplementedError(self)
 
-    def pad(self, value, pad_width, mode=extrapolation.ZERO):
+    def pad(self, value, pad_width, mode='constant', constant_values=0):
         """
         Pad a tensor with values as specified by `mode` and `constant_values`.
         :param value: tensor
         :param pad_width: 2D tensor specifying the number of values padded to the edges of each axis in the form [[before axis 0, after axis 0], ...] including batch and component axes.
-        :param mode: extrapolation
+        :param mode: can be specified for each face, options are 'constant', 'replicate', 'circular', 'symmetric', 'reflect'
+        :param constant_values: used for out-of-bounds points if mode='constant'
         """
         raise NotImplementedError(self)
 
@@ -394,17 +393,18 @@ If `multiples` has more dimensions than `value`, these dimensions are added to `
 
     # --- Math function with default implementation ---
 
-    def resample(self, inputs, sample_coords, interpolation='linear', boundary=extrapolation.ZERO):
+    def resample(self, inputs, sample_coords, interpolation='linear', boundary='constant', constant_values=0):
         """
         Interpolates a regular grid at the specified coordinates.
         :param inputs: grid data
         :param sample_coords: tensor of floating grid indices. The last dimension must match the dimensions of inputs. The first grid point of dimension i lies at position 0, the last at data.shape[i]-1.
         :param interpolation: only 'linear' is currently supported
-        :param boundary: extrapolation
+        :param boundary: values to use for coordinates outside the grid, can be specified for each face, options are 'constant', 'replicate', 'circular', 'symmetric', 'reflect'
+        :param constant_values: Value used for constant boundaries, can be specified for each face
         """
-        from phi.math.backend import general_grid_sample_nd
+        from . import general_grid_sample_nd
         assert interpolation == 'linear'
-        return general_grid_sample_nd(inputs, sample_coords, boundary, self)
+        return general_grid_sample_nd(inputs, sample_coords, boundary, constant_values, self)
 
     def ndims(self, tensor):
         return len(self.staticshape(tensor))

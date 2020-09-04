@@ -4,8 +4,7 @@ from abc import ABC
 
 from phi import math
 from phi.geom import Geometry
-from phi.math import Shape, Tensor
-from phi.math.backend import Extrapolation
+from phi.math import Shape, Tensor, Extrapolation
 
 
 class Field:

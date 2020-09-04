@@ -79,27 +79,22 @@ class TFBackend(Backend):
     def concat(self, values, axis):
         return tf.concat(values, axis)
 
-    def pad(self, value, pad_width, mode=extrapolation.ZERO):
-        passes = split_multi_mode_pad(self.ndims(value), PadSettings(pad_width, mode))
+    def pad(self, value, pad_width, mode='constant', constant_values=0):
+        passes = split_multi_mode_pad(self.ndims(value), PadSettings(pad_width, mode, constant_values), split_by_constant_value=True)
         for pad_pass in passes:
             value = self._single_mode_single_constant_pad(value, *pad_pass)
         return value
 
-    def _single_mode_single_constant_pad(self, value, pad_width, single_mode):
-        if isinstance(single_mode, extrapolation.ConstantExtrapolation):
-            constant_value = single_mode.value
-            return tf.pad(value, pad_width, 'CONSTANT', constant_values=constant_value)
-        if single_mode == extrapolation.SYMMETRIC:
-            return tf.pad(value, pad_width, 'SYMMETRIC')
-        if single_mode == extrapolation.REFLECT:
-            return tf.pad(value, pad_width, 'REFLECT')
-        if single_mode == extrapolation.PERIODIC:
+    def _single_mode_single_constant_pad(self, value, pad_width, single_mode, constant_value=0):
+        assert single_mode in ('constant', 'symmetric', 'circular', 'reflect', 'replicate'), single_mode
+        if single_mode == 'circular':
             return circular_pad(value, pad_width, self)
-        if single_mode == extrapolation.BOUNDARY:
+        if single_mode == 'replicate':
             if np.any(np.array(pad_width) > 1):
                 return replicate_pad(value, pad_width, self)
             else:
-                return tf.pad(value, pad_width, 'SYMMETRIC')
+                single_mode = 'symmetric'
+        return tf.pad(value, pad_width, single_mode.upper(), constant_values=constant_value)  # constant, symmetric, reflect
 
     def reshape(self, value, shape):
         return tf.reshape(value, shape)
@@ -151,12 +146,12 @@ class TFBackend(Backend):
             result.set_shape(shape_out)
         return result
 
-    def resample(self, inputs, sample_coords, interpolation='linear', boundary=extrapolation.ZERO):
+    def resample(self, inputs, sample_coords, interpolation='linear', boundary='constant', constant_values=0):
         assert interpolation == 'linear'
         if use_cuda(inputs):
             return resample_cuda(inputs, sample_coords, boundary)
         else:
-            return Backend.resample(self, inputs, sample_coords, interpolation, boundary)
+            return general_grid_sample_nd(inputs, sample_coords, boundary, constant_values, self)  # while this is a bit slower than niftynet, it give consisten results at the boundaries
 
     def zeros(self, shape, dtype=None):
         return tf.zeros(shape, dtype=dtype or self.float_type)

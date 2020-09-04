@@ -1,6 +1,7 @@
 from unittest import TestCase
 from phi.flow import *
-from phi.backend._extrapolation import *
+from phi.math._extrapolation import *
+from phi import math
 
 
 class TestExtrapolationOperators(TestCase):
@@ -32,5 +33,11 @@ class TestExtrapolationOperators(TestCase):
 
         try: PERIODIC + ONE; assert False
         except IncompatibleExtrapolations: pass
+
+    def test_pad_constant(self):
+        a = math.zeros(2, x=10, y=10, batch=10)
+        p = math.pad(a, {'x': (1, 2)}, ZERO)
+        self.assertIsInstance(p, CollapsedTensor)
+        self.assertEqual((10, 13, 10, 2), p.shape.sizes)
 
 

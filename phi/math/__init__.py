@@ -17,8 +17,11 @@ Main classes:
 * Shape
 """
 
-from .backend import DYNAMIC_BACKEND, extrapolation, Extrapolation
+from .backend import DYNAMIC_BACKEND
 from .backend._scipy_backend import SCIPY_BACKEND
+
+from . import _extrapolation as extrapolation
+from ._extrapolation import Extrapolation
 
 from phi.struct.struct_backend import StructBroadcastBackend
 

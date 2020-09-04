@@ -6,7 +6,8 @@ import warnings
 import numpy as np
 
 from phi import struct
-from .backend import Extrapolation, extrapolation
+from . import _extrapolation as extrapolation
+from ._extrapolation import Extrapolation
 from . import _tensor_math as math
 from ._shape import CHANNEL_DIM, spatial_shape, channel_shape
 from ._tensor_math import broadcast_op, batch_stack, channel_stack

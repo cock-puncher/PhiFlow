@@ -441,6 +441,9 @@ class CollapsedTensor(Tensor):
             self._cached = NativeTensor(tiled, self.shape)
         return self._cached
 
+    def expand(self):
+        return self._cache()
+
     def native(self, order=None):
         if order is None or tuple(order) == self.shape.names:
             return self._cache().native()

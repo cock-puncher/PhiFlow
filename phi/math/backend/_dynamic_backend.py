@@ -1,6 +1,5 @@
 import warnings
 
-from . import _extrapolation as extrapolation
 from ._backend import Backend
 
 
@@ -100,8 +99,8 @@ class DynamicBackend(Backend):
     def tile(self, value, multiples):
         return self.choose_backend(value).tile(value, multiples)
 
-    def pad(self, value, pad_width, mode=extrapolation.ZERO):
-        return self.choose_backend(value).pad(value, pad_width, mode)
+    def pad(self, value, pad_width, mode='constant', constant_values=0):
+        return self.choose_backend(value).pad(value, pad_width, mode, constant_values)
 
     def reshape(self, value, shape):
         return self.choose_backend(value).reshape(value, shape)
@@ -125,8 +124,8 @@ class DynamicBackend(Backend):
     def py_func(self, func, inputs, Tout, shape_out, stateful=True, name=None, grad=None):
         return self.choose_backend(inputs).py_func(func, inputs, Tout, shape_out, stateful, name, grad)
 
-    def resample(self, inputs, sample_coords, interpolation='linear', boundary=extrapolation.ZERO):
-        return self.choose_backend([inputs, sample_coords]).resample(inputs, sample_coords, interpolation=interpolation, boundary=boundary)
+    def resample(self, inputs, sample_coords, interpolation='linear', boundary='constant', constant_values=0):
+        return self.choose_backend([inputs, sample_coords]).resample(inputs, sample_coords, interpolation=interpolation, boundary=boundary, constant_values=constant_values)
 
     def range(self, start, limit=None, delta=1, dtype=None):
         possible_tensors = [t for t in (start, limit, delta) if t is not None]

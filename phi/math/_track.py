@@ -1,6 +1,7 @@
 import numpy as np
 
-from .backend import DYNAMIC_BACKEND as math, Extrapolation, extrapolation
+from .backend import DYNAMIC_BACKEND as math
+from . import _extrapolation as extrapolation
 from ._tensors import Tensor, NativeTensor, combined_shape, TensorStack
 
 
@@ -79,7 +80,7 @@ def as_sparse_linear_operation(tensor: Tensor):
     return SparseLinearOperation(tensor, sparse_diag, tracking_shape)
 
 
-def pad_operator(tensor: SparseLinearOperation, pad_widths: dict, mode: Extrapolation):
+def pad_operator(tensor: SparseLinearOperation, pad_widths: dict, mode):
     # TODO create large index array reshape(range(...)), then pad?
     (row, col), data = math.coordinates(tensor.dependency_matrix, unstack_coordinates=True)
     if mode == extrapolation.ZERO:

@@ -7,7 +7,7 @@ import scipy.signal
 import scipy.sparse
 from scipy.sparse.linalg import cg, LinearOperator
 
-from . import Backend, extrapolation, split_multi_mode_pad, PadSettings, general_grid_sample_nd
+from . import Backend, split_multi_mode_pad, PadSettings, general_grid_sample_nd
 from ._backend_helper import combined_dim
 
 
@@ -90,25 +90,19 @@ class SciPyBackend(Backend):
     def concat(self, values, axis):
         return np.concatenate(values, axis)
 
-    def pad(self, value, pad_width, mode=extrapolation.ZERO):
-        passes = split_multi_mode_pad(self.ndims(value), PadSettings(pad_width, mode))
+    def pad(self, value, pad_width, mode='constant', constant_values=0):
+        passes = split_multi_mode_pad(self.ndims(value), PadSettings(pad_width, mode, constant_values), split_by_constant_value=False)
         for pad_pass in passes:
             value = self._single_mode_pad(value, *pad_pass)
         return value
 
-    def _single_mode_pad(self, value, pad_width, single_mode):
-        if isinstance(single_mode, extrapolation.ConstantExtrapolation):
-            return np.pad(value, pad_width, 'constant', constant_values=single_mode.value)
+    def _single_mode_pad(self, value, pad_width, single_mode, constant_values=0):
+        assert single_mode in ('constant', 'symmetric', 'circular', 'reflect', 'replicate'), single_mode
+        if single_mode.lower() == 'constant':
+            return np.pad(value, pad_width, 'constant', constant_values=constant_values)
         else:
-            if single_mode == extrapolation.BOUNDARY:
-                single_mode = 'edge'
-            elif single_mode == extrapolation.PERIODIC:
-                single_mode = 'wrap'
-            elif single_mode == extrapolation.REFLECT:
-                single_mode = 'reflect'
-            elif single_mode == extrapolation.SYMMETRIC:
-                single_mode = 'symmetric'
-            assert isinstance(single_mode, str), single_mode
+            if single_mode in ('circular', 'replicate'):
+                single_mode = {'circular': 'wrap', 'replicate': 'edge'}[single_mode]
             return np.pad(value, pad_width, single_mode)
 
     def reshape(self, value, shape):

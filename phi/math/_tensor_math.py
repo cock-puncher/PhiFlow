@@ -6,8 +6,9 @@ from functools import partial
 import numpy as np
 
 from ._shape import BATCH_DIM, CHANNEL_DIM, SPATIAL_DIM, Shape, EMPTY_SHAPE, spatial_shape, define_shape
+from . import _extrapolation as extrapolation
 from ._track import as_sparse_linear_operation, SparseLinearOperation, pad_operator, sum_operators
-from .backend import extrapolation, math
+from .backend import math
 from ._tensors import Tensor, tensor, broadcastable_native_tensors, NativeTensor, CollapsedTensor, TensorStack, combined_shape
 from phi.math.backend._scipy_backend import SCIPY_BACKEND
 
@@ -46,7 +47,7 @@ def zeros(channels=(), batch=None, dtype=None, **spatial):
     :param spatial:
     :return:
     """
-    shape = define_shape(channels, batch, infer_types_if_not_given=True, **spatial)
+    shape = define_shape(channels, batch=batch, infer_types_if_not_given=True, **spatial)
     native_zero = math.zeros((), dtype=dtype)
     collapsed = NativeTensor(native_zero, EMPTY_SHAPE)
     return CollapsedTensor(collapsed, shape)
@@ -130,19 +131,21 @@ def concat(values, axis):
     return NativeTensor(concatenated, values[0].shape)
 
 
-def spatial_pad(value, pad_width, mode=extrapolation.ZERO):
+def spatial_pad(value, pad_width: tuple or list, mode: 'extrapolation.Extrapolation'):
     value = tensor(value)
     return pad(value, {n: w for n, w in zip(value.shape.spatial.names, pad_width)}, mode=mode)
 
 
-def pad(value, pad_width: dict, mode=extrapolation.ZERO):
+def pad(value: Tensor, widths: dict, mode: 'extrapolation.Extrapolation'):
     """
 
-    :param value:
-    :param pad_width: name -> (lower, upper) or both
-    :param mode:
+    :param value: tensor to be padded
+    :param widths: name: str -> (lower: int, upper: int)
+    :param mode: extrapolation object
     :return:
     """
+    return mode.pad(value, widths)
+
     value = tensor(value)
     if isinstance(value, NativeTensor):
         native = value.tensor
@@ -177,14 +180,14 @@ def pad(value, pad_width: dict, mode=extrapolation.ZERO):
         raise NotImplementedError()
 
 
-def resample(inputs, sample_coords, interpolation='linear', boundary=extrapolation.ZERO):
+def resample(inputs, sample_coords, boundary):
     if isinstance(boundary, (tuple, list)):
         boundary = [extrapolation.ZERO, *boundary, extrapolation.ZERO]
 
     def atomic_resample(inputs, sample_coords):
         inputs_, _ = _invertible_standard_form(inputs)
         sample_coords_, _ = _invertible_standard_form(sample_coords)  # TODO iterate if keep_separate
-        resampled = math.resample(inputs_, sample_coords_, interpolation, boundary)
+        resampled = math.resample(inputs_, sample_coords_, 'linear', boundary)
 
         batch_shape = inputs.shape.batch & sample_coords.shape.batch
         result_shape = batch_shape & sample_coords.shape.spatial & inputs.shape.channel
