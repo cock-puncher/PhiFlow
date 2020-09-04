@@ -1,4 +1,5 @@
 import numbers
+import re
 import time
 import warnings
 from functools import partial
@@ -11,9 +12,7 @@ from ._track import as_sparse_linear_operation, SparseLinearOperation, pad_opera
 from .backend import math
 from ._tensors import Tensor, tensor, broadcastable_native_tensors, NativeTensor, CollapsedTensor, TensorStack, combined_shape
 from phi.math.backend._scipy_backend import SCIPY_BACKEND
-
-any_ = any
-all_ = all
+from ._config import GLOBAL_AXIS_ORDER
 
 
 def is_tensor(x):
@@ -29,6 +28,30 @@ def as_tensor(x, convert_external=True):
 
 def copy(tensor, only_mutable=False):
     raise NotImplementedError()
+
+
+def print_(value):
+    """
+    Print a tensor with no more than two spatial dimensions, splitting it along all batch and channel dimensions.
+
+    Unlike regular printing, the primary axis, typically x, is oriented to the right.
+
+    :param value: tensor-like
+    """
+    value = tensor(value)
+    axis_order = value.shape.spatial.names if GLOBAL_AXIS_ORDER.x_last() else tuple(reversed(value.shape.spatial.names))
+    if value.shape.spatial.rank == 1:
+        for index_dict in value.shape.non_spatial.meshgrid():
+            print(f"--- {', '.join('%s=%d' % (name, idx) for name, idx in index_dict.items())} ---")
+            text = np.array2string(value[index_dict].numpy(axis_order), precision=2, separator=', ', max_line_width=np.inf)
+            print(' ' + re.sub('[\[\]]', '', text))
+    elif value.shape.spatial.rank == 2:
+        for index_dict in value.shape.non_spatial.meshgrid():
+            print(f"--- {', '.join('%s=%d' % (name, idx) for name, idx in index_dict.items())} ---")
+            text = np.array2string(value[index_dict].numpy(axis_order), precision=2, separator=', ', max_line_width=np.inf)
+            print(' ' + re.sub('[\[\]]', '', re.sub('\],', '', text)))
+    else:
+        raise NotImplementedError('Can only print tensors with up to 2 spatial dimensions.')
 
 
 def transpose(tensor, axes):
@@ -116,9 +139,9 @@ def spatial_stack(values, axis='x'):
 
 def _stack(values, dim, dim_type):
     def inner_stack(*values):
-        varying_shapes = any_([v.shape != values[0].shape for v in values[1:]])
-        tracking = any_([isinstance(v, SparseLinearOperation) for v in values])
-        inner_keep_separate = any_([isinstance(v, TensorStack) and v.keep_separate for v in values])
+        varying_shapes = any([v.shape != values[0].shape for v in values[1:]])
+        tracking = any([isinstance(v, SparseLinearOperation) for v in values])
+        inner_keep_separate = any([isinstance(v, TensorStack) and v.keep_separate for v in values])
         return TensorStack(values, dim, dim_type, keep_separate=varying_shapes or tracking or inner_keep_separate)
 
     result = broadcast_op(inner_stack, values)
@@ -237,7 +260,7 @@ def reshape(value, shape):
 
 
 def prod(value, axis=None):
-    if axis is None and isinstance(value, (tuple, list)) and all_(isinstance(v, numbers.Number) for v in value):
+    if axis is None and isinstance(value, (tuple, list)) and all(isinstance(v, numbers.Number) for v in value):
         return SCIPY_BACKEND.prod(value)
     raise NotImplementedError()
 
@@ -279,7 +302,7 @@ def _reduce(value: Tensor or list or tuple, axis, native_function):
         red_inners = [_reduce(t, inner_axes, native_function) for t in value.tensors]
         # --- outer reduce ---
         if value.stack_dim_name in axes:
-            if any_([isinstance(t, SparseLinearOperation) for t in red_inners]):
+            if any([isinstance(t, SparseLinearOperation) for t in red_inners]):
                 return sum_operators(red_inners)  # TODO other functions
             natives = [t.native() for t in red_inners]
             result = native_function(natives, axis=0)
@@ -308,11 +331,11 @@ def std(value: Tensor or list or tuple, axis=None):
     return _reduce(value, axis, math.std)
 
 
-def any(boolean_tensor: Tensor or list or tuple, axis=None):
+def any_(boolean_tensor: Tensor or list or tuple, axis=None):
     return _reduce(boolean_tensor, axis, math.any)
 
 
-def all(boolean_tensor: Tensor or list or tuple, axis=None):
+def all_(boolean_tensor: Tensor or list or tuple, axis=None):
     return _reduce(boolean_tensor, axis, math.all)
 
 

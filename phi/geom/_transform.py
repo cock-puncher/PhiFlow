@@ -1,7 +1,7 @@
 import warnings
 
 from phi import math
-from phi.geom import GLOBAL_AXIS_ORDER
+from phi.math import GLOBAL_AXIS_ORDER
 from ._geom import Geometry
 from ._sphere import Sphere
 

@@ -23,13 +23,14 @@ from .backend._scipy_backend import SCIPY_BACKEND
 from . import _extrapolation as extrapolation
 from ._extrapolation import Extrapolation
 
-from phi.struct.struct_backend import StructBroadcastBackend
+from ._config import GLOBAL_AXIS_ORDER
 
 from ._shape import Shape, define_shape, spatial_shape, infer_shape, EMPTY_SHAPE
 from ._tensors import tensor, Tensor, combined_shape, Tensor as Tensor
 from ._tensor_math import (
     is_tensor, as_tensor,
     copy,
+    print_ as print,
     transpose,
     zeros, ones, fftfreq, random_normal, meshgrid,  # creation operators (use default backend)
     batch_stack, spatial_stack, channel_stack,
@@ -60,7 +61,7 @@ from ._tensor_math import (
     boolean_mask,
     isfinite,
     scatter,
-    any, all,
+    any_ as any, all_ as all,
     fft, ifft,
     imag, real,
     cast,
@@ -81,8 +82,5 @@ from ._nd import (
     downsample2x, upsample2x, interpolate_linear,
     spatial_sum, vec_abs, vec_squared
 )
-
-# Setup Backend
-DYNAMIC_BACKEND.add_backend(StructBroadcastBackend(DYNAMIC_BACKEND))
 
 choose_backend = DYNAMIC_BACKEND.choose_backend

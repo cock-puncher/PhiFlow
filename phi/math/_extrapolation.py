@@ -54,7 +54,6 @@ class ConstantExtrapolation(Extrapolation):
         return ZERO
 
     def pad(self, value: Tensor, widths: dict):
-        value = tensor(value)
         if isinstance(value, NativeTensor):
             native = value.tensor
             ordered_pad_widths = value.shape.order(widths, default=(0, 0))
@@ -162,6 +161,38 @@ class _StatelessExtrapolation(Extrapolation):
 
     def gradient(self):
         raise NotImplementedError()
+
+    def pad(self, value: Tensor, widths: dict) -> Tensor:
+        if isinstance(value, NativeTensor):
+            native = value.tensor
+            ordered_pad_widths = value.shape.order(widths, default=0)
+            result_tensor = native_math.pad(native, ordered_pad_widths, repr(self))
+            new_shape = value.shape.with_sizes(math.staticshape(result_tensor))
+            return NativeTensor(result_tensor, new_shape)
+        elif isinstance(value, CollapsedTensor):
+            inner = value.tensor
+            inner_widths = {dim: w for dim, w in widths.items() if dim in inner.shape}
+            if len(inner_widths) > 0:
+                inner = self.pad(inner, widths)
+            new_sizes = []
+            for size, dim, dim_type in value.shape.dimensions:
+                if dim not in widths:
+                    new_sizes.append(size)
+                else:
+                    delta = sum(widths[dim]) if isinstance(widths[dim], (tuple, list)) else 2 * widths[dim]
+                    new_sizes.append(size + int(delta))
+            new_shape = value.shape.with_sizes(new_sizes)
+            return CollapsedTensor(inner, new_shape)
+        # elif isinstance(value, SparseLinearOperation):
+        #     return pad_operator(value, widths, mode)
+        elif isinstance(value, TensorStack):
+            if not value.requires_broadcast:
+                return self.pad(value._cache())
+            inner_widths = {dim: w for dim, w in widths.items() if dim != value.stack_dim_name}
+            tensors = [self.pad(t, inner_widths) for t in value.tensors]
+            return TensorStack(tensors, value.stack_dim_name, value.stack_dim_type, value.keep_separate)
+        else:
+            raise NotImplementedError()
 
     def __eq__(self, other):
         return type(other) == type(self)

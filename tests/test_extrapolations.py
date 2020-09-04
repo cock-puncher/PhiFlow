@@ -1,5 +1,4 @@
 from unittest import TestCase
-from phi.flow import *
 from phi.math._extrapolation import *
 from phi import math
 
@@ -34,9 +33,17 @@ class TestExtrapolationOperators(TestCase):
         try: PERIODIC + ONE; assert False
         except IncompatibleExtrapolations: pass
 
-    def test_pad_constant(self):
+    def test_pad_tensor(self):
+        a = math.meshgrid([1, 2, 3, 4], [5, 6, 7])
+        p = math.pad(a, {'x': (1, 2)}, ZERO)
+        math.print(p)
+
+    def test_pad_collapsed(self):
         a = math.zeros(2, x=10, y=10, batch=10)
         p = math.pad(a, {'x': (1, 2)}, ZERO)
+        self.assertIsInstance(p, CollapsedTensor)
+        self.assertEqual((10, 13, 10, 2), p.shape.sizes)
+        p = math.pad(a, {'x': (1, 2)}, PERIODIC)
         self.assertIsInstance(p, CollapsedTensor)
         self.assertEqual((10, 13, 10, 2), p.shape.sizes)
 

@@ -38,14 +38,21 @@ class SciPyBackend(Backend):
         return array
 
     def is_tensor(self, x, only_native=False):
-        is_array = isinstance(x, np.ndarray) and x.dtype != np.object
-        is_np_scalar = isinstance(x, np.bool_)
-        is_sparse = scipy.sparse.issparse(x)
-        is_python = isinstance(x, (numbers.Number, bool))
+        if isinstance(x, np.ndarray) and x.dtype != np.object:
+            return True
+        if scipy.sparse.issparse(x):
+            return True
+        if isinstance(x, np.bool_):
+            return True
+        # --- Above considered native ---
         if only_native:
-            return is_array or is_sparse or is_np_scalar
-        else:
-            return is_array or is_python or is_sparse or is_np_scalar
+            return False
+        # --- Non-native types
+        if isinstance(x, (numbers.Number, bool)):
+            return True
+        if isinstance(x, (tuple, list)):
+            return all([self.is_tensor(item, False) for item in x])
+        return False
 
     def numpy(self, tensor):
         if isinstance(tensor, np.ndarray):

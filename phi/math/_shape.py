@@ -340,6 +340,19 @@ class Shape:
                 raise NotImplementedError()
         return result
 
+    def meshgrid(self):
+        """
+        Builds a sequence containing all multi-indices within a tensor of this shape.
+        """
+        indices = [0] * self.rank
+        while True:
+            yield {name: index for name, index in zip(self.names, indices)}
+            for i in range(self.rank-1, -1, -1):
+                indices[i] = (indices[i] + 1) % self.sizes[i]
+                if indices[i] != 0:
+                    break
+                return
+
 
 EMPTY_SHAPE = Shape((), (), ())
 
@@ -462,7 +475,7 @@ def infer_shape(shape, dim_names=None, batch_dims=None, spatial_dims=None, chann
                 dim_names.append('batch %d' % (i,))
         # --- spatial names ---
         for i in range(spatial_dims):
-            dim_names.append(geom.GLOBAL_AXIS_ORDER.axis_name(i, spatial_dims))
+            dim_names.append(math.GLOBAL_AXIS_ORDER.axis_name(i, spatial_dims))
         # --- channel names ---
         if channel_dims == 0:
             pass

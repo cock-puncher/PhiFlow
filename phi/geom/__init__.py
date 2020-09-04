@@ -1,4 +1,3 @@
-from ._config import GLOBAL_AXIS_ORDER
 from ._geom_util import assert_same_rank
 from ._geom import Geometry
 from ._union import union  # Union is private
