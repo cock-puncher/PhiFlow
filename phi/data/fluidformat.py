@@ -13,7 +13,6 @@ import numpy as np
 from os.path import join, isfile, isdir
 
 from phi import struct, math, __version__ as phi_version, field
-from phi.geom import GLOBAL_AXIS_ORDER as physics_config
 
 
 def read_sim_frame(simpath, fieldnames, frame, set_missing_to_none=True):

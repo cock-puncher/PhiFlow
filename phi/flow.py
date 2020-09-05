@@ -19,7 +19,7 @@ import numpy as np
 
 from phi import math, struct
 
-from phi.geom import Geometry, Sphere, box, GLOBAL_AXIS_ORDER, union
+from phi.geom import Geometry, Sphere, box, union
 
 from phi import field
 from phi.field import Grid, CenteredGrid, StaggeredGrid, GeometryMask
@@ -35,5 +35,3 @@ from phi.data.fluidformat import write_sim_frame
 
 from phi.app.app import App
 from phi.viz.display import show
-
-physics_config = GLOBAL_AXIS_ORDER

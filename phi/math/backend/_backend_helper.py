@@ -12,7 +12,7 @@ NeighbourReduce = namedtuple('NeighbourReduce', ['requires_weights', 'f'])
 def general_grid_sample_nd(grid, coords, boundary, constant_values, math, reduce='linear'):
     """
     Backend-independent grid sampling with linear interpolation.
-    Supports boundary conditions per face: 'constant' , 'replicate', 'circular', 'symmetric', 'reflect'.
+    Supports boundary conditions per face: 'constant' , 'boundary', 'periodic', 'symmetric', 'reflect'.
 
     Interpolation at the boundaries works according to the following principle:
     The boundary mode determines the value at virtual grid points outside the grid bounds.
@@ -22,7 +22,7 @@ def general_grid_sample_nd(grid, coords, boundary, constant_values, math, reduce
 
     :param grid: tensor of shape (batch_dim, spatial dims..., channels)
     :param coords: tensor of shape (batch_dim, ..., spatial_rank)
-    :param boundary: 'zero'/'constant', 'replicate', 'circular', 'symmetric', 'reflect'
+    :param boundary: 'zero'/'constant', 'boundary', 'periodic', 'symmetric', 'reflect'
     :param constant_values: extrapolation values (same options as in pad)
     :param math: backend
     :return: tensor of sampled values from the grid
@@ -69,8 +69,8 @@ def general_grid_sample_nd(grid, coords, boundary, constant_values, math, reduce
 def pad_constant_boundaries(grid, coords, boundary, constant_values, math):
     boundary = CT(boundary)
     spatial_rank = math.staticshape(coords)[-1]
-    pad_widths = [[1 if boundary[dim, upper] in ('zero', 'constant') else 0 for upper in (False, True)] for dim in range(-spatial_rank - 1, -1)]
-    boundary = [['replicate' if boundary[dim, upper] in ('zero', 'constant') else boundary[dim, upper] for upper in (False, True)] for dim in range(-spatial_rank - 1, -1)]
+    pad_widths = [[1 if boundary[dim, upper] == 'constant' else 0 for upper in (False, True)] for dim in range(-spatial_rank - 1, -1)]
+    boundary = [['boundary' if boundary[dim, upper] == 'constant' else boundary[dim, upper] for upper in (False, True)] for dim in range(-spatial_rank - 1, -1)]
     lower_pads = [lu[0] for lu in pad_widths]
     grid = math.pad(grid, [[0, 0]] + pad_widths + [[0, 0]], mode='constant', constant_values=constant_values)
     if sum(lower_pads) > 0:
@@ -97,11 +97,9 @@ def apply_boundary(boundary, coords, input_size, math):
 
 
 def _apply_single_boundary(boundary, coords, input_size, math):
-    if boundary == 'zero' or boundary == 'constant':
-        raise ValueError("boundary 'zero' cannot be applied to coordinates")
-    elif boundary == 'replicate':
+    if boundary == 'boundary':
         return math.clip(coords, 0, input_size - 1)
-    elif boundary == 'circular':
+    elif boundary == 'periodic':
         return math.mod(coords, input_size)
     elif boundary == 'symmetric':
         coords = math.mod(coords, 2 * input_size)
@@ -153,7 +151,7 @@ def combined_dim(dim1, dim2):
     return dim1
 
 
-def circular_pad(value, pad_width, math):
+def periodic_pad(value, pad_width, math):
     dims = range(math.ndims(value))
     for dim in dims:
         pad_lower, pad_upper = pad_width[dim]
@@ -165,7 +163,7 @@ def circular_pad(value, pad_width, math):
     return value
 
 
-def replicate_pad(value, pad_width, math):
+def boundary_pad(value, pad_width, math):
     dims = range(math.ndims(value))
     for dim in dims:
         pad_lower, pad_upper = pad_width[dim]

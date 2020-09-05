@@ -1,5 +1,5 @@
-from phi import math, struct
-from phi.geom import GLOBAL_AXIS_ORDER, Geometry
+from phi import math
+from phi.geom import Geometry
 
 from ._analytic import AnalyticField
 from ..math import Shape
@@ -26,7 +26,7 @@ class AngularVelocity(AnalyticField):
                 assert len(reduce_channels) == 1
                 dist_0 = dist_0[{reduce_channels[0]: 0}]
                 dist_1 = dist_1[{reduce_channels[0]: 1}]
-            if GLOBAL_AXIS_ORDER.is_x_first:
+            if math.GLOBAL_AXIS_ORDER.is_x_first:
                 velocity = strength * math.channel_stack([-dist_1, dist_0], 'vector')
             else:
                 velocity = strength * math.channel_stack([dist_1, -dist_0], 'vector')

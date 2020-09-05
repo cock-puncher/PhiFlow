@@ -2,7 +2,7 @@
 import numpy as np
 
 from phi import math
-from phi.geom import AABox, GLOBAL_AXIS_ORDER, Geometry
+from phi.geom import AABox, Geometry
 from phi.geom import assert_same_rank
 from ._field import Field, IncompatibleFieldTypes
 from ._grid import CenteredGrid, Grid
@@ -27,7 +27,7 @@ class StaggeredGrid(Grid):
                 data = data.staggered.as_channel('vector')
             else:
                 raise ValueError("data needs to have 'vector' or 'staggered' dimension")
-        x = data.vector[0 if GLOBAL_AXIS_ORDER.is_x_first else -1]
+        x = data.vector[0 if math.GLOBAL_AXIS_ORDER.is_x_first else -1]
         self._data = data
         self._shape = x.shape.with_size('x', x.shape.get_size('x') - 1).expand(x.rank, 'vector', CHANNEL_DIM)
         Grid.__init__(self, self.resolution, box, extrapolation)
@@ -60,6 +60,7 @@ class StaggeredGrid(Grid):
                     tensors.append(comp_grid.data)
                 return StaggeredGrid(math.channel_stack(tensors, 'vector'), box, extrapolation)
         elif callable(value):
+            raise NotImplementedError()
             x = CenteredGrid.getpoints(domain.box, domain.resolution).copied_with(extrapolation=Material.extrapolation_mode(domain.boundaries), name=name)
             value = value(x)
             return value

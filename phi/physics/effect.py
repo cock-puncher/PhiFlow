@@ -1,6 +1,6 @@
 import warnings
 
-from phi.geom import Geometry, GLOBAL_AXIS_ORDER
+from phi.geom import Geometry
 from phi.field import Field, GeometryMask, ConstantField
 from phi import math, struct
 from .physics import State, Physics, StateDependency
@@ -86,7 +86,7 @@ class Gravity(State):
 def gravity_tensor(gravity, rank):
     if isinstance(gravity, Gravity):
         gravity = gravity.gravity
-    return gravity * GLOBAL_AXIS_ORDER.up_vector(rank)
+    return gravity * math.GLOBAL_AXIS_ORDER.up_vector(rank)
 
 
 class FieldPhysics(Physics):

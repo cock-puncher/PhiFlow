@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from phi import math
 from phi.math import extrapolation
 
 
@@ -19,12 +20,19 @@ class Material:
         return self.name
 
     @staticmethod
-    def as_material(obj: Material or tuple or list) -> Material:
+    def as_material(obj: Material or tuple or list or dict) -> Material:
         if isinstance(obj, Material):
             return obj
-        else:
-            grid_extrapolation = extrapolation.MixedExtrapolation()
-            return Material('mix', grid_extrapolation, )
+        if isinstance(obj, (tuple, list)):
+            axes = [math.GLOBAL_AXIS_ORDER.axis_name(i, len(obj)) for i in range(len(obj))]
+            obj = {ax: mat for ax, mat in zip(axes, obj)}
+        if isinstance(obj, dict):
+            grid_extrapolation = {ax: mat.grid_extrapolation for ax, mat in obj.items()}
+            vector_extrapolation = {ax: mat.vector_extrapolation for ax, mat in obj.items()}
+            active_extrapolation = {ax: mat.active_extrapolation for ax, mat in obj.items()}
+            accessible_extrapolation = {ax: mat.accessible_extrapolation for ax, mat in obj.items()}
+            return Material('mixed', grid_extrapolation, vector_extrapolation, active_extrapolation, accessible_extrapolation)
+        raise NotImplementedError()
 
 
 OPEN = Material('open', extrapolation.ZERO, extrapolation.ZERO, extrapolation.ZERO, extrapolation.ONE)

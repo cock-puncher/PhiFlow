@@ -399,7 +399,7 @@ If `multiples` has more dimensions than `value`, these dimensions are added to `
         :param inputs: grid data
         :param sample_coords: tensor of floating grid indices. The last dimension must match the dimensions of inputs. The first grid point of dimension i lies at position 0, the last at data.shape[i]-1.
         :param interpolation: only 'linear' is currently supported
-        :param boundary: values to use for coordinates outside the grid, can be specified for each face, options are 'constant', 'replicate', 'circular', 'symmetric', 'reflect'
+        :param boundary: values to use for coordinates outside the grid, can be specified for each face, options are 'constant', 'boundary', 'periodic', 'symmetric', 'reflect'
         :param constant_values: Value used for constant boundaries, can be specified for each face
         """
         from . import general_grid_sample_nd

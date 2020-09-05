@@ -106,14 +106,14 @@ class CenteredGrid(Grid):
         local_points = self.box.global_to_local(points)
         local_points = local_points * self.resolution - 0.5
         if len(reduce_channels) == 0:
-            return math.resample(self.data, local_points, 'linear', self.extrapolation)
+            return math.resample(self.data, local_points, self.extrapolation)
         else:
             assert self.shape.channel.sizes == points.shape.get_size(reduce_channels)
             if len(reduce_channels) > 1:
                 raise NotImplementedError()
             channels = []
             for i, channel in enumerate(self._data.vector.unstack()):
-                channels.append(math.resample(channel, local_points[{reduce_channels[0]: i}], 'linear', self.extrapolation))
+                channels.append(math.resample(channel, local_points[{reduce_channels[0]: i}], self.extrapolation))
             return math.channel_stack(channels, 'vector')
 
     def _shift_resample(self, resolution, box):
