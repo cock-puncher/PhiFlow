@@ -7,7 +7,7 @@ import scipy.signal
 import scipy.sparse
 from scipy.sparse.linalg import cg, LinearOperator
 
-from . import Backend, split_multi_mode_pad, PadSettings, general_grid_sample_nd
+from . import Backend
 from ._backend_helper import combined_dim
 
 
@@ -98,19 +98,13 @@ class SciPyBackend(Backend):
         return np.concatenate(values, axis)
 
     def pad(self, value, pad_width, mode='constant', constant_values=0):
-        passes = split_multi_mode_pad(self.ndims(value), PadSettings(pad_width, mode, constant_values), split_by_constant_value=False)
-        for pad_pass in passes:
-            value = self._single_mode_pad(value, *pad_pass)
-        return value
-
-    def _single_mode_pad(self, value, pad_width, single_mode, constant_values=0):
-        assert single_mode in ('constant', 'symmetric', 'circular', 'reflect', 'replicate'), single_mode
-        if single_mode.lower() == 'constant':
+        assert mode in ('constant', 'symmetric', 'periodic', 'reflect', 'boundary'), mode
+        if mode == 'constant':
             return np.pad(value, pad_width, 'constant', constant_values=constant_values)
         else:
-            if single_mode in ('circular', 'replicate'):
-                single_mode = {'circular': 'wrap', 'replicate': 'edge'}[single_mode]
-            return np.pad(value, pad_width, single_mode)
+            if mode in ('periodic', 'boundary'):
+                mode = {'periodic': 'wrap', 'boundary': 'edge'}[mode]
+            return np.pad(value, pad_width, mode)
 
     def reshape(self, value, shape):
         return np.reshape(value, shape)

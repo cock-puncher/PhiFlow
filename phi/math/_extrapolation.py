@@ -12,7 +12,23 @@ class IncompatibleExtrapolations(ValueError):
 
 class Extrapolation:
 
+    def __init__(self, pad_rank):
+        """
+        Extrapolations are used to determine values of grids or other structures outside the sampled bounds.
+
+        They play a pivotal role in padding and sampling.
+
+        :param pad_rank: low-ranking extrapolations are handled first during mixed-extrapolation padding.
+        The typical order is periodic=1, boundary=2, symmetric=3, reflect=4, constant=5.
+        """
+        self.pad_rank = pad_rank
+
     def to_dict(self) -> dict:
+        """
+        Serialize this extrapolation to a dictionary that is JSON-writable.
+
+        Use extrapolation.from_dict() to restore the Extrapolation object.
+        """
         raise NotImplementedError()
 
     def gradient(self) -> Extrapolation:
@@ -42,6 +58,7 @@ class Extrapolation:
 class ConstantExtrapolation(Extrapolation):
 
     def __init__(self, value):
+        Extrapolation.__init__(self, 5)
         self.value = tensor(value)
 
     def __repr__(self):
@@ -86,6 +103,9 @@ class ConstantExtrapolation(Extrapolation):
 
     def __eq__(self, other):
         return isinstance(other, ConstantExtrapolation) and math.close(self.value, other.value)
+
+    def __hash__(self):
+        return hash(self.__class__)
 
     def is_zero(self):
         return self == ZERO
@@ -165,7 +185,7 @@ class _StatelessExtrapolation(Extrapolation):
     def pad(self, value: Tensor, widths: dict) -> Tensor:
         if isinstance(value, NativeTensor):
             native = value.tensor
-            ordered_pad_widths = value.shape.order(widths, default=0)
+            ordered_pad_widths = value.shape.order(widths, default=(0, 0))
             result_tensor = native_math.pad(native, ordered_pad_widths, repr(self))
             new_shape = value.shape.with_sizes(math.staticshape(result_tensor))
             return NativeTensor(result_tensor, new_shape)
@@ -187,7 +207,7 @@ class _StatelessExtrapolation(Extrapolation):
         #     return pad_operator(value, widths, mode)
         elif isinstance(value, TensorStack):
             if not value.requires_broadcast:
-                return self.pad(value._cache())
+                return self.pad(value._cache(), widths)
             inner_widths = {dim: w for dim, w in widths.items() if dim != value.stack_dim_name}
             tensors = [self.pad(t, inner_widths) for t in value.tensors]
             return TensorStack(tensors, value.stack_dim_name, value.stack_dim_type, value.keep_separate)
@@ -196,6 +216,9 @@ class _StatelessExtrapolation(Extrapolation):
 
     def __eq__(self, other):
         return type(other) == type(self)
+
+    def __hash__(self):
+        return hash(self.__class__)
 
     def _op(self, other, op):
         if type(other) == type(self):
@@ -268,10 +291,37 @@ class _ReflectExtrapolation(_StatelessExtrapolation):
 
 ZERO = ConstantExtrapolation(0)
 ONE = ConstantExtrapolation(1)
-PERIODIC = _PeriodicExtrapolation()
-BOUNDARY = _BoundaryExtrapolation()
-SYMMETRIC = _SymmetricExtrapolation()
-REFLECT = _ReflectExtrapolation()
+PERIODIC = _PeriodicExtrapolation(1)
+BOUNDARY = _BoundaryExtrapolation(2)
+SYMMETRIC = _SymmetricExtrapolation(3)
+REFLECT = _ReflectExtrapolation(4)
+
+
+class MixedExtrapolation(Extrapolation):
+
+    def __init__(self, lower_upper_by_axis: dict):
+        Extrapolation.__init__(self, None)
+        self.ext = {ax: (e, e) if isinstance(e, Extrapolation) else tuple(e) for ax, e in lower_upper_by_axis.items()}
+
+    def to_dict(self) -> dict:
+        return {
+            'type': 'mixed',
+            'axes': {ax: (es[0].to_dict(), es[1].to_dict()) for ax, es in self.ext.items()}
+        }
+
+    def gradient(self) -> Extrapolation:
+        return MixedExtrapolation({ax: (es[0].gradient(), es[1].gradient()) for ax, es in self.ext.items()})
+
+    def pad(self, value: Tensor, widths: dict) -> Tensor:
+        extrapolations = set(sum(self.ext.values(), ()))
+        extrapolations = tuple(sorted(extrapolations, key=lambda e: e.pad_rank))
+        for ext in extrapolations:
+            ext_widths = {ax: (l if self.ext[ax][0] == ext else 0, u if self.ext[ax][1] == ext else 0) for ax, (l, u) in widths.items()}
+            value = ext.pad(value, ext_widths)
+        return value
+
+    def evaluate(self, value: Tensor, coordinates):
+        pass
 
 
 def from_dict(dictionary: dict) -> Extrapolation:

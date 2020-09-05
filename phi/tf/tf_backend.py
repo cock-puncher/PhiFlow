@@ -80,21 +80,15 @@ class TFBackend(Backend):
         return tf.concat(values, axis)
 
     def pad(self, value, pad_width, mode='constant', constant_values=0):
-        passes = split_multi_mode_pad(self.ndims(value), PadSettings(pad_width, mode, constant_values), split_by_constant_value=True)
-        for pad_pass in passes:
-            value = self._single_mode_single_constant_pad(value, *pad_pass)
-        return value
-
-    def _single_mode_single_constant_pad(self, value, pad_width, single_mode, constant_value=0):
-        assert single_mode in ('constant', 'symmetric', 'circular', 'reflect', 'replicate'), single_mode
-        if single_mode == 'circular':
+        assert mode in ('constant', 'symmetric', 'periodic', 'reflect', 'boundary'), mode
+        if mode == 'periodic':
             return circular_pad(value, pad_width, self)
-        if single_mode == 'replicate':
+        if mode == 'boundary':
             if np.any(np.array(pad_width) > 1):
                 return replicate_pad(value, pad_width, self)
             else:
-                single_mode = 'symmetric'
-        return tf.pad(value, pad_width, single_mode.upper(), constant_values=constant_value)  # constant, symmetric, reflect
+                mode = 'symmetric'
+        return tf.pad(value, pad_width, mode.upper(), constant_values=constant_values)  # constant, symmetric, reflect
 
     def reshape(self, value, shape):
         return tf.reshape(value, shape)

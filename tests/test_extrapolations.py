@@ -35,7 +35,8 @@ class TestExtrapolationOperators(TestCase):
 
     def test_pad_tensor(self):
         a = math.meshgrid([1, 2, 3, 4], [5, 6, 7])
-        p = math.pad(a, {'x': (1, 2)}, ZERO)
+        extrap = MixedExtrapolation({'x': PERIODIC, 'y': (ONE, REFLECT)})
+        p = math.pad(a, {'x': (1, 2), 'y': (3, 4)}, extrap)
         math.print(p)
 
     def test_pad_collapsed(self):
@@ -46,5 +47,3 @@ class TestExtrapolationOperators(TestCase):
         p = math.pad(a, {'x': (1, 2)}, PERIODIC)
         self.assertIsInstance(p, CollapsedTensor)
         self.assertEqual((10, 13, 10, 2), p.shape.sizes)
-
-
