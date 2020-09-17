@@ -41,7 +41,7 @@ from ._tensor_math import (
     prod,
     divide_no_nan,
     where,
-    sum, mean, std,
+    sum_ as sum, mean, std,
     zeros_like, ones_like,
     dot,
     matmul,

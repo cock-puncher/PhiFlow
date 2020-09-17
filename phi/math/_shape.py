@@ -33,6 +33,11 @@ class Shape:
     def dimensions(self):
         return zip(self.sizes, self.names, self.types)
 
+    @property
+    def name(self):
+        assert self.rank == 1, 'Shape.name is only defined for shapes of rank 1.'
+        return self.names[0]
+
     def __len__(self):
         return len(self.sizes)
 
@@ -109,6 +114,9 @@ class Shape:
     @property
     def non_singleton(self):
         return self.filtered([size != 1 for size in self.sizes])
+
+    def unstack(self):
+        return tuple(Shape([self.sizes[i]], [self.names[i]], [self.types[i]]) for i in range(self.rank))
 
     def mask(self, names):
         if isinstance(names, str):
@@ -352,6 +360,32 @@ class Shape:
                 if indices[i] != 0:
                     break
                 return
+
+    def __add__(self, other):
+        return self._op1(other, lambda s, o: s + o)
+
+    def __radd__(self, other):
+        return self._op1(other, lambda s, o: o + s)
+
+    def __sub__(self, other):
+        return self._op1(other, lambda s, o: s - o)
+
+    def __rsub__(self, other):
+        return self._op1(other, lambda s, o: o - s)
+
+    def __mul__(self, other):
+        return self._op1(other, lambda s, o: s * o)
+
+    def __rmul__(self, other):
+        return self._op1(other, lambda s, o: o * s)
+
+    def _op1(self, other, fun):
+        if isinstance(other, int):
+            return Shape([fun(s, other) for s in self.sizes], self.names, self.types)
+        elif isinstance(other, Shape):
+            return Shape([fun(s, o) for s, o in zip(self.sizes, other.sizes)], self.names, self.types)
+        else:
+            return NotImplemented
 
 
 EMPTY_SHAPE = Shape((), (), ())

@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from abc import ABC
+
 from .backend import math as native_math
+from ._shape import Shape
 from ._tensors import Tensor, NativeTensor, CollapsedTensor, TensorStack, tensor
 from . import _tensor_math as math
 
@@ -48,11 +51,28 @@ class Extrapolation:
         """
         raise NotImplementedError()
 
-    def transform_coordinates(self, coordinates, shape):
+    def concat_pad(self, value: Tensor, widths: dict) -> Tensor:
+        """
+        Performs a pad operation using the native stack instead of native pad.
+        This method therefore works independently of the padding modes supported by the current backend.
+
+        :param value: tensor to be padded
+        :param widths: name: str -> (lower: int, upper: int)
+        """
+        raise NotImplementedError()
+
+    def transform_coordinates(self, coordinates: Tensor, shape: Shape) -> Tensor:
         return NotImplemented
 
     def evaluate(self, value: Tensor, coordinates):
         raise NotImplementedError()
+
+    def __getitem__(self, item):
+        return self
+
+    @property
+    def is_copy_pad(self):
+        return False
 
 
 class ConstantExtrapolation(Extrapolation):
@@ -100,6 +120,9 @@ class ConstantExtrapolation(Extrapolation):
             return TensorStack(tensors, value.stack_dim_name, value.stack_dim_type, value.keep_separate)
         else:
             raise NotImplementedError()
+
+    def transform_coordinates(self, coordinates: Tensor, shape: Shape) -> Tensor:
+        return NotImplemented
 
     def __eq__(self, other):
         return isinstance(other, ConstantExtrapolation) and math.close(self.value, other.value)
@@ -174,13 +197,14 @@ class ConstantExtrapolation(Extrapolation):
             raise IncompatibleExtrapolations(self, other)
 
 
-class _StatelessExtrapolation(Extrapolation):
+class _CopyExtrapolation(Extrapolation, ABC):
+
+    @property
+    def is_copy_pad(self):
+        return True
 
     def to_dict(self) -> dict:
         return {'type': repr(self)}
-
-    def gradient(self):
-        raise NotImplementedError()
 
     def pad(self, value: Tensor, widths: dict) -> Tensor:
         if isinstance(value, NativeTensor):
@@ -223,7 +247,7 @@ class _StatelessExtrapolation(Extrapolation):
     def _op(self, other, op):
         if type(other) == type(self):
             return self
-        elif isinstance(other, Extrapolation) and not isinstance(other, _StatelessExtrapolation):
+        elif isinstance(other, Extrapolation) and not isinstance(other, _CopyExtrapolation):
             op = getattr(other, op.__name__)
             return op(self)
         else:
@@ -248,7 +272,7 @@ class _StatelessExtrapolation(Extrapolation):
         return self._op(other, ConstantExtrapolation.__lt__)
 
 
-class _BoundaryExtrapolation(_StatelessExtrapolation):
+class _BoundaryExtrapolation(_CopyExtrapolation):
     """
     Uses the closest defined value for points lying outside the defined region.
     """
@@ -258,16 +282,48 @@ class _BoundaryExtrapolation(_StatelessExtrapolation):
     def gradient(self):
         return ZERO
 
+    def transform_coordinates(self, coordinates: Tensor, shape: Shape) -> Tensor:
+        return math.clip(coordinates, 0, math.tensor(shape - 1))
 
-class _PeriodicExtrapolation(_StatelessExtrapolation):
+    def concat_pad(self, value: Tensor, widths: dict) -> Tensor:
+        raise NotImplementedError()
+        dims = range(math.ndims(value))
+        for dim in dims:
+            pad_lower, pad_upper = pad_width[dim]
+            if pad_lower == 0 and pad_upper == 0:
+                continue  # Nothing to pad
+            bottom_row = value[
+                (slice(None),) + tuple([slice(1) if d == dim else slice(None) for d in dims]) + (slice(None),)]
+            top_row = value[
+                (slice(None),) + tuple([slice(-1, None) if d == dim else slice(None) for d in dims]) + (slice(None),)]
+            value = math.concat([bottom_row] * pad_lower + [value] + [top_row] * pad_upper)
+        return value
+
+
+class _PeriodicExtrapolation(_CopyExtrapolation):
     def __repr__(self):
         return 'periodic'
 
     def gradient(self):
         return self
 
+    def transform_coordinates(self, coordinates: Tensor, shape: Shape) -> Tensor:
+        return coordinates % shape
 
-class _SymmetricExtrapolation(_StatelessExtrapolation):
+    def concat_pad(self, value: Tensor, widths: dict) -> Tensor:
+        raise NotImplementedError()
+        dims = range(math.ndims(value))
+        for dim in dims:
+            pad_lower, pad_upper = pad_width[dim]
+            if pad_lower == 0 and pad_upper == 0:
+                continue  # Nothing to pad
+            lower = value[tuple([slice(value.shape[dim] - pad_lower, None) if d == dim else slice(None) for d in dims])]
+            upper = value[tuple([slice(None, pad_upper) if d == dim else slice(None) for d in dims])]
+            value = math.concat([lower, value, upper], axis=dim)
+        return value
+
+
+class _SymmetricExtrapolation(_CopyExtrapolation):
     """
     Mirror with the boundary value occurring twice.
     """
@@ -277,8 +333,28 @@ class _SymmetricExtrapolation(_StatelessExtrapolation):
     def gradient(self):
         return -self
 
+    def transform_coordinates(self, coordinates: Tensor, shape: Shape) -> Tensor:
+        coordinates = coordinates % (2 * shape)
+        return ((2 * shape - 1) - abs((2 * shape - 1) - 2 * coordinates)) // 2
 
-class _ReflectExtrapolation(_StatelessExtrapolation):
+    def concat_pad(self, value: Tensor, widths: dict) -> Tensor:
+        raise NotImplementedError()
+        raise NotImplementedError()  # only used by PyTorch which does not support ::-1 axis flips
+        dims = range(math.ndims(value))
+        for dim in dims:
+            pad_lower, pad_upper = pad_width[dim]
+            if pad_lower == 0 and pad_upper == 0:
+                continue  # Nothing to pad
+            top_rows = value[
+                tuple([slice(value.shape[dim] - pad_upper, None) if d == dim else slice(None) for d in dims])]
+            bottom_rows = value[tuple([slice(None, pad_lower) if d == dim else slice(None) for d in dims])]
+            top_rows = math.flip_axis(top_rows, dim)
+            bottom_rows = math.flip_axis(bottom_rows, dim)
+            value = math.concat([bottom_rows, value, top_rows], axis=dim)
+        return value
+
+
+class _ReflectExtrapolation(_CopyExtrapolation):
     """
     Mirror of inner elements. The boundary value is not duplicated.
     """
@@ -287,6 +363,10 @@ class _ReflectExtrapolation(_StatelessExtrapolation):
 
     def gradient(self):
         return -self
+
+    def transform_coordinates(self, coordinates: Tensor, shape: Shape) -> Tensor:
+        coordinates = coordinates % (2 * shape - 2)
+        return (shape - 1) - math.abs((shape - 1) - coordinates)
 
 
 ZERO = ConstantExtrapolation(0)
@@ -299,9 +379,14 @@ REFLECT = _ReflectExtrapolation(4)
 
 class MixedExtrapolation(Extrapolation):
 
-    def __init__(self, lower_upper_by_axis: dict):
+    def __init__(self, extrapolations: dict):
+        """
+        A mixed extrapolation uses different extrapolations for different sides.
+
+        :param extrapolations: axis: str -> (lower: Extrapolation, upper: Extrapolation) or Extrapolation
+        """
         Extrapolation.__init__(self, None)
-        self.ext = {ax: (e, e) if isinstance(e, Extrapolation) else tuple(e) for ax, e in lower_upper_by_axis.items()}
+        self.ext = {ax: (e, e) if isinstance(e, Extrapolation) else tuple(e) for ax, e in extrapolations.items()}
 
     def to_dict(self) -> dict:
         return {
@@ -322,6 +407,24 @@ class MixedExtrapolation(Extrapolation):
 
     def evaluate(self, value: Tensor, coordinates):
         pass
+
+    def transform_coordinates(self, coordinates: Tensor, shape: Shape) -> Tensor:
+        coordinates = math.unstack(coordinates, axis=-1)
+        assert len(self.ext) == len(shape) == len(coordinates)
+        result = []
+        for dim, dim_coords in zip(shape.spatial.unstack(), coordinates):
+            dim_extrapolations = self.ext[dim.name]
+            if dim_extrapolations[0] == dim_extrapolations[1]:
+                result.append(dim_extrapolations[0].transform_coordinates(dim_coords, dim))
+            else:  # separate boundary for lower and upper face
+                lower = dim_extrapolations[0].transform_coordinates(dim_coords, dim)
+                upper = dim_extrapolations[1].transform_coordinates(dim_coords, dim)
+                result.append(math.where(dim_coords <= 0, lower, upper))
+        return math.channel_stack(result, 'vector')
+
+    def __getitem__(self, item):
+        dim, face = item
+        return self.ext[dim][face]
 
 
 def from_dict(dictionary: dict) -> Extrapolation:

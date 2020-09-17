@@ -43,9 +43,9 @@ def normalize_to(target: Tensor, source: Tensor, epsilon=1e-5):
     :param epsilon: small number to prevent division by zero or None.
     :return: normalized tensor of the same shape as target
     """
-    target_total = math.sum(target, axis=target.shape.non_batch.names)
+    target_total = math.sum_(target, axis=target.shape.non_batch.names)
     denominator = math.maximum(target_total, epsilon) if epsilon is not None else target_total
-    source_total = math.sum(source, axis=source.shape.non_batch.names)
+    source_total = math.sum_(source, axis=source.shape.non_batch.names)
     return target * (source_total / denominator)
 
 
@@ -54,9 +54,9 @@ def l1_loss(tensor, batch_norm=True, reduce_batches=True):
         all_tensors = struct.flatten(tensor)
         return sum(l1_loss(tensor, batch_norm, reduce_batches) for tensor in all_tensors)
     if reduce_batches:
-        total_loss = math.sum(math.abs(tensor))
+        total_loss = math.sum_(math.abs(tensor))
     else:
-        total_loss = math.sum(math.abs(tensor), axis=list(range(1, len(tensor.shape))))
+        total_loss = math.sum_(math.abs(tensor), axis=list(range(1, len(tensor.shape))))
     if batch_norm and reduce_batches:
         batch_size = math.shape(tensor)[0]
         return math.div(total_loss, math.to_float(batch_size))
@@ -72,7 +72,7 @@ def l_n_loss(tensor, n, batch_norm=True):
     if struct.isstruct(tensor):
         all_tensors = struct.flatten(tensor)
         return sum(l_n_loss(tensor, n, batch_norm) for tensor in all_tensors)
-    total_loss = math.sum(tensor ** n) / n
+    total_loss = math.sum_(tensor ** n) / n
     if batch_norm:
         batch_size = math.shape(tensor)[0]
         return math.div(total_loss, math.to_float(batch_size))
@@ -133,7 +133,7 @@ def abs_square(complex):
 #         dim_index_in_spatial = x.shape.spatial.reset_indices().index(dimension)
 #         lower, upper = _multi_roll(x, dimension, relative_shifts, diminish_others=(-relative_shifts[0], relative_shifts[1]), names=axes, base_selection={0: rank - dimension - 1})
 #         components.append(upper - lower)
-#     return math.sum(components, 0)
+#     return math.sum_(components, 0)
 
 
 def shift(x: Tensor, offsets: tuple, axes: tuple or None = None, padding: Extrapolation or None = extrapolation.BOUNDARY, stack_dim='shift') -> list:
@@ -203,7 +203,7 @@ def laplace(x, dx=1, padding=extrapolation.BOUNDARY, axes=None):
         return x.gradient()
     left, center, right = shift(tensor(x), (-1, 0, 1), axes, padding, stack_dim='_laplace')
     result = (left + right - 2 * center) / tensor(dx, names='_laplace')
-    result = math.sum(result, '_laplace')
+    result = math.sum_(result, '_laplace')
     return result
 
 
@@ -277,7 +277,7 @@ def upsample2x(tensor, interpolation='linear'):
 
 
 def spatial_sum(tensor):
-    summed = math.sum(tensor, axis=math.dimrange(tensor))
+    summed = math.sum_(tensor, axis=math.dimrange(tensor))
     for i in math.dimrange(tensor):
         summed = math.expand_dims(summed, i)
     return summed
@@ -296,8 +296,8 @@ def interpolate_linear(tensor: Tensor, start, size):
 
 
 def vec_abs(tensor: Tensor):
-    return math.sqrt(math.sum(tensor ** 2, axis=tensor.shape.channel.names))
+    return math.sqrt(math.sum_(tensor ** 2, axis=tensor.shape.channel.names))
 
 
 def vec_squared(tensor: Tensor):
-    return math.sum(tensor ** 2, axis=tensor.shape.channel.names)
+    return math.sum_(tensor ** 2, axis=tensor.shape.channel.names)

@@ -122,22 +122,20 @@ def meshgrid(*coordinates):
     return TensorStack(channels, 'vector', CHANNEL_DIM)
 
 
-def channel_stack(values, axis='channel'):
-    assert isinstance(axis, str)
+def channel_stack(values, axis: str):
     return _stack(values, axis, CHANNEL_DIM)
 
 
-def batch_stack(values, axis='batch'):
-    assert isinstance(axis, str)
+def batch_stack(values, axis: str = 'batch'):
     return _stack(values, axis, BATCH_DIM)
 
 
-def spatial_stack(values, axis='x'):
-    assert isinstance(axis, str)
+def spatial_stack(values, axis: str):
     return _stack(values, axis, SPATIAL_DIM)
 
 
-def _stack(values, dim, dim_type):
+def _stack(values, dim: str, dim_type: int):
+    assert isinstance(dim, str)
     def inner_stack(*values):
         varying_shapes = any([v.shape != values[0].shape for v in values[1:]])
         tracking = any([isinstance(v, SparseLinearOperation) for v in values])
@@ -187,7 +185,7 @@ def pad(value: Tensor, widths: dict, mode: 'extrapolation.Extrapolation'):
             if dim not in pad_width:
                 new_sizes.append(size)
             else:
-                delta = sum(pad_width[dim]) if isinstance(pad_width[dim], (tuple, list)) else 2 * pad_width[dim]
+                delta = sum_(pad_width[dim]) if isinstance(pad_width[dim], (tuple, list)) else 2 * pad_width[dim]
                 new_sizes.append(size + int(delta))
         new_shape = value.shape.with_sizes(new_sizes)
         return CollapsedTensor(inner, new_shape)
@@ -220,6 +218,50 @@ def resample(inputs, sample_coords, boundary):
 
     result = broadcast_op(atomic_resample, [inputs, sample_coords])
     return result
+
+
+def closest_grid_values(grid: Tensor, coordinates: Tensor, extrap: 'extrapolation.Extrapolation'):
+    """
+
+    :param extrap: grid extrapolation
+    :param grid: grid data. The grid is spanned by the spatial dimensions of the tensor
+    :param coordinates: tensor with 1 channel dimension holding vectors pointing to locations in grid index space
+    :return: Tensor of shape (batch, coord_spatial, grid_spatial=(2, 2,...), grid_channel)
+    """
+    # alternative method: pad array for all 2^d combinations, then stack to simplify gather_nd.
+    assert all(name not in grid.shape for name in coordinates.shape.spatial.names), 'grid and coordinates must have different spatial dimensions'
+    # --- Compute weights ---
+    sp_rank = grid.shape.spatial.rank
+    min_coords = to_int(floor(coordinates))
+    max_coords = extrap.transform_coordinates(min_coords + 1, grid.shape)
+    min_coords = extrap.transform_coordinates(min_coords, grid.shape)
+
+    def interpolate_nd(is_hi_by_axis, axis):
+        is_hi_by_axis_2 = is_hi_by_axis | np.array([ax == axis for ax in range(sp_rank)])
+        coords_left = math.where(is_hi_by_axis, max_coords, min_coords)
+        coords_right = math.where(is_hi_by_axis_2, max_coords, min_coords)
+        if axis == sp_rank - 1:
+            values_left = grid[coords_left]
+            values_right = grid[coords_right]
+        else:
+            values_left = interpolate_nd(is_hi_by_axis, axis + 1)
+            values_right = interpolate_nd(is_hi_by_axis_2, axis + 1)
+        return spatial_stack([values_left, values_right], axis)
+
+    result = interpolate_nd(np.array([False] * sp_rank), 0)
+    return result
+
+
+def grid_sample(grid: Tensor, coordinates: Tensor, extrap: 'extrapolation.Extrapolation'):
+    # --- Pad tensor where transform is not possible ---
+    non_copy_pad = {dim: (not extrap[dim, 0].is_copy_pad, not extrap[dim, 1].is_copy_pad) for dim in grid.shape.spatial.names}
+    grid = extrap.pad(grid, non_copy_pad)
+    coordinates += [not extrap[dim, 0].is_copy_pad for dim in grid.shape.spatial.names]
+    # --- Find neighbors and interpolate ---
+    closest = closest_grid_values(grid, coordinates)
+    right_weights = coordinates % 1
+    left_weights = 1 - right_weights
+    return sum_(closest * weights, axis=grid.shape.spatial.names)
 
 
 def broadcast_op(operation, tensors):
@@ -274,7 +316,7 @@ def where(condition, x=None, y=None):
     raise NotImplementedError()
 
 
-def sum(value: Tensor or list or tuple, axis=None):
+def sum_(value: Tensor or list or tuple, axis=None):
     return _reduce(value, axis, math.sum)
 
 
