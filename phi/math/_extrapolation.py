@@ -49,30 +49,44 @@ class Extrapolation:
         :param value: tensor to be padded
         :param widths: name: str -> (lower: int, upper: int)
         """
-        raise NotImplementedError()
+        for dim in widths:
+            left_pad_values = self.pad_values(value, widths[dim][False], dim, False)
+            right_pad_values = self.pad_values(value, widths[dim][True], dim, True)
+            value = math._stack([left_pad_values, value, right_pad_values], dim, value.shape.get_type(dim))
+        return value
 
-    def concat_pad(self, value: Tensor, widths: dict) -> Tensor:
+    def pad_values(self, value: Tensor, width: int, dimension: str, upper_edge: bool) -> Tensor:
         """
-        Performs a pad operation using the native stack instead of native pad.
-        This method therefore works independently of the padding modes supported by the current backend.
+        Determines the values with which the given tensor would be padded at the specified using this extrapolation.
 
         :param value: tensor to be padded
-        :param widths: name: str -> (lower: int, upper: int)
+        :param width: number of cells to pad perpendicular to the face
+        :param dimension: axis in which to pad
+        :param upper_edge: True for upper edge, False for lower edge
+        :return: tensor that can be concatenated to value for padding
         """
         raise NotImplementedError()
 
     def transform_coordinates(self, coordinates: Tensor, shape: Shape) -> Tensor:
+        """
+        If is_copy_pad, transforms outsider coordinates to point to the index from which the value should be copied.
+        Otherwise, returns NotImplemented.
+
+        :param coordinates: integer coordinates in index space
+        :param shape: tensor shape
+        :return: transformed coordinates or NotImplemented
+        """
         return NotImplemented
-
-    def evaluate(self, value: Tensor, coordinates):
-        raise NotImplementedError()
-
-    def __getitem__(self, item):
-        return self
 
     @property
     def is_copy_pad(self):
+        """
+        :return: True if all pad values are copies of existing values in the tensor to be padded
+        """
         return False
+
+    def __getitem__(self, item):
+        return self
 
 
 class ConstantExtrapolation(Extrapolation):
